@@ -9,6 +9,7 @@ class MedicamentosApiService {
   final String? _apiKey;
   final http.Client _client;
 
+  // ignore: prefer_initializing_formals
   MedicamentosApiService({String? apiKey, http.Client? client})
       : _apiKey = apiKey,
         _client = client ?? http.Client();

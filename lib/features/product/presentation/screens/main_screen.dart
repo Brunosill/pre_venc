@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../auth/presentation/screens/profile_screen.dart';
 import '../../../ocr/presentation/screens/home_screen.dart';
 import '../../../ocr/presentation/screens/multi_capture_screen.dart';
 import '../../domain/entities/product.dart';
@@ -32,8 +34,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) =>
-                const MultiCaptureScreen(useCameraFirst: false),
+            builder: (_) => const MultiCaptureScreen(useCameraFirst: false),
           ),
         );
         break;
@@ -74,14 +75,12 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Future<void> _flowBarcode() async {
-    // 1. Escaneia direto (sem escolher categoria antes)
     final code = await Navigator.push<String>(
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
     if (code == null || code.isEmpty || !mounted) return;
 
-    // 2. Loading enquanto consulta em cascata
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -96,9 +95,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     }
 
     if (!mounted) return;
-    Navigator.pop(context); // fecha loading
+    Navigator.pop(context);
 
-    // 3. Achou nome/marca/categoria em alguma base?
     final name = result?['name'] as String?;
     final brand = result?['brand'] as String?;
     final categoryName = result?['category'] as String?;
@@ -106,9 +104,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     if (result != null && name != null && name.trim().isNotEmpty) {
       final displayName = _composeDisplayName(name.trim(), brand);
 
-      // 3.1 Pergunta se quer fotografar para completar validade/lote/fabricação
       final wantsPhoto = await _askToCaptureForDetails(displayName);
-      if (wantsPhoto == null || !mounted) return; // usuário cancelou
+      if (wantsPhoto == null || !mounted) return;
 
       final suggestion = ProductSuggestion(
         name: name.trim(),
@@ -129,7 +126,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       return;
     }
 
-    // 4. Não encontrou em nenhuma base → oferece foto ou manual
     if (!mounted) return;
     _showNotFoundDialog(code, categoryName);
   }
@@ -152,9 +148,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         ),
         content: Text(
           'Encontramos "$productName" nas bases públicas.\n\n'
-          'Ainda faltam os dados de validade, lote e fabricação. '
-          'Deseja fotografar a embalagem para extrair essas informações '
-          'automaticamente?',
+              'Ainda faltam os dados de validade, lote e fabricação. '
+              'Deseja fotografar a embalagem para extrair essas informações '
+              'automaticamente?',
         ),
         actions: [
           TextButton(
@@ -186,8 +182,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         title: const Text('Produto não encontrado'),
         content: Text(
           '$sourceHint\n\n'
-          'Você pode fotografar a embalagem para o OCR extrair as '
-          'informações, ou digitar manualmente.',
+              'Você pode fotografar a embalagem para o OCR extrair as '
+              'informações, ou digitar manualmente.',
         ),
         actions: [
           TextButton(
@@ -212,8 +208,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             onPressed: () {
               Navigator.pop(ctx);
               _openCaptureWithCameraPermission(
-                initialSuggestion:
-                    ProductSuggestion(barcode: code),
+                initialSuggestion: ProductSuggestion(barcode: code),
               );
             },
             child: const Text('Fotografar'),
@@ -225,11 +220,23 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAuth = ref.watch(isAuthenticatedProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Produtos'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: Icon(
+              isAuth ? Icons.account_circle : Icons.account_circle_outlined,
+            ),
+            tooltip: isAuth ? 'Meu perfil' : 'Entrar',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'Histórico de OCR',

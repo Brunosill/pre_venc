@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/product.dart';
 import '../../utils/product_parser.dart';
+import '../providers/barcode_providers.dart';
 import '../providers/product_providers.dart';
 import 'barcode_scanner_screen.dart';
 
@@ -36,7 +37,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   bool _saving = false;
   late ProductSource _source;
 
-  // Rastreia quais campos vieram do OCR/API (para destacar visualmente)
   bool _nameAuto = false;
   bool _barcodeAuto = false;
   bool _loteAuto = false;
@@ -55,7 +55,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       _manufacturingDate = p.manufacturingDate;
       _expirationDate = p.expirationDate;
       _source = p.source;
-      // Edição: tudo é "manual" daqui pra frente
     } else if (widget.suggestion != null) {
       final s = widget.suggestion!;
       _nameCtrl.text = s.name ?? '';
@@ -99,7 +98,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       setState(() {
         if (isExpiration) {
           _expirationDate = picked;
-          _expAuto = false; // usuário escolheu manualmente
+          _expAuto = false;
         } else {
           _manufacturingDate = picked;
           _fabAuto = false;
@@ -158,6 +157,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           source: _source,
         );
         await ref.read(addProductProvider)(product);
+
+        // Oferece contribuição ao catálogo (só produto novo)
+        await _offerCatalogContribution(product);
       }
 
       if (!mounted) return;
@@ -172,6 +174,56 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _offerCatalogContribution(Product product) async {
+    if (product.barcode == null || product.barcode!.isEmpty) return;
+    if (widget.existingProduct != null) return;
+
+    final contributionService =
+    ref.read(catalogContributionServiceProvider);
+    if (contributionService == null) return;
+
+    final alreadyIn =
+    await contributionService.isInCatalog(product.barcode!);
+    if (alreadyIn) return;
+
+    if (!mounted) return;
+
+    final wants = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Contribuir ao catálogo?'),
+        content: Text(
+          'O código ${product.barcode} ainda não está no catálogo público. '
+              'Deseja compartilhar o nome "${product.name}" para ajudar outros '
+              'usuários?\n\n'
+              'Nenhum dado pessoal (validade, lote) será compartilhado.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Não'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Contribuir'),
+          ),
+        ],
+      ),
+    );
+
+    if (wants == true) {
+      final ok = await contributionService.contribute(product);
+      if (!mounted) return;
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Obrigado! Produto adicionado ao catálogo.'),
+          ),
+        );
+      }
     }
   }
 
@@ -221,7 +273,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   Widget _buildReviewBanner() {
     if (widget.existingProduct != null) return const SizedBox.shrink();
 
-    final hasAuto = _nameAuto || _barcodeAuto || _loteAuto || _fabAuto || _expAuto;
+    final hasAuto =
+        _nameAuto || _barcodeAuto || _loteAuto || _fabAuto || _expAuto;
     if (!hasAuto) return const SizedBox.shrink();
 
     return Container(
@@ -239,7 +292,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           const Expanded(
             child: Text(
               'Dados extraídos automaticamente. Revise e edite '
-              'antes de salvar.',
+                  'antes de salvar.',
               style: TextStyle(fontSize: 13),
             ),
           ),
@@ -270,7 +323,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   const Text(
                     'Texto original do OCR',
                     style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   IconButton(
@@ -328,8 +381,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             _buildReviewBanner(),
-
-            // NOME
             TextFormField(
               controller: _nameCtrl,
               decoration: InputDecoration(
@@ -340,11 +391,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               ),
               onChanged: (_) => setState(() => _nameAuto = false),
               validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+              (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
             ),
             const SizedBox(height: 16),
-
-            // CÓDIGO DE BARRAS
             TextFormField(
               controller: _barcodeCtrl,
               decoration: InputDecoration(
@@ -367,8 +416,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               onChanged: (_) => setState(() => _barcodeAuto = false),
             ),
             const SizedBox(height: 16),
-
-            // LOTE
             TextFormField(
               controller: _loteCtrl,
               decoration: InputDecoration(
@@ -381,8 +428,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               onChanged: (_) => setState(() => _loteAuto = false),
             ),
             const SizedBox(height: 16),
-
-            // FABRICAÇÃO
             ListTile(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4),
@@ -406,8 +451,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               onTap: () => _pickDate(isExpiration: false),
             ),
             const SizedBox(height: 16),
-
-            // VALIDADE
             ListTile(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4),
@@ -431,17 +474,16 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               onTap: () => _pickDate(isExpiration: true),
             ),
             const SizedBox(height: 32),
-
             SizedBox(
               height: 48,
               child: ElevatedButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: _saving
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : const Icon(Icons.check),
                 label: Text(_saving ? 'Salvando...' : 'Salvar produto'),
               ),

@@ -2,6 +2,7 @@ class AlertSettings {
   /// Dias antes do vencimento para disparar notificação.
   /// Padrão: [30, 1]
   final List<int> daysBefore;
+
   final bool enabled;
 
   const AlertSettings({

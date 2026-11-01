@@ -6,13 +6,14 @@ import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/providers/product_providers.dart';
 import '../../data/models/alert_settings_model.dart';
 import '../../data/services/alert_scheduler.dart';
+import '../../data/services/flutter_notification_scheduler.dart';
 import '../../domain/entities/alert_settings.dart';
 
 // Box
 final alertSettingsBoxProvider =
     Provider<Box<AlertSettingsModel>>((ref) => HiveBoxes.alertSettingsBox);
 
-// Scheduler
+// Scheduler (injeta a implementação real)
 final alertSchedulerProvider = Provider<AlertScheduler>((ref) {
   return AlertScheduler(notifications: FlutterNotificationScheduler());
 });
@@ -51,8 +52,8 @@ final saveAlertSettingsProvider =
       ),
     );
 
-    // Reagenda com a nova configuração
-    final products = ref.read(productsStreamProvider).asData?.value ?? const <Product>[];
+    final products =
+        ref.read(productsStreamProvider).asData?.value ?? const <Product>[];
     final model = box.get('settings');
     if (model != null) {
       await scheduler.rescheduleAll(products, model);
@@ -60,7 +61,7 @@ final saveAlertSettingsProvider =
   };
 });
 
-// Reagendamento sob demanda (usado ao salvar/deletar produto)
+// Reagendamento sob demanda
 final rescheduleAlertsProvider = Provider<Future<void> Function()>((ref) {
   final scheduler = ref.watch(alertSchedulerProvider);
   final box = ref.watch(alertSettingsBoxProvider);
@@ -74,7 +75,7 @@ final rescheduleAlertsProvider = Provider<Future<void> Function()>((ref) {
   };
 });
 
-// Lista de produtos que vencem em até 7 dias (para o banner)
+// Produtos que vencem em até 7 dias
 final expiringThisWeekProvider = Provider<List<Product>>((ref) {
   final products =
       ref.watch(productsStreamProvider).asData?.value ?? const <Product>[];
