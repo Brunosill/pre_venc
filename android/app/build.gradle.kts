@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "br.com.prevenc.pre_venc"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
