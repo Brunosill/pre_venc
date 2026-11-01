@@ -53,6 +53,8 @@ dependencies:
   uuid: ^4.4.2
   intl: ^0.20.3
 
+  mobile_scanner: ^6.0.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

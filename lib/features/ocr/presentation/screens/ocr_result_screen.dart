@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../product/presentation/screens/product_form_screen.dart';
 import '../../domain/entities/ocr_result.dart';
 import '../providers/ocr_providers.dart';
 
@@ -231,6 +232,37 @@ class _OcrResultScreenState extends ConsumerState<OcrResultScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          SizedBox(
+            height: 48,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+              ),
+              onPressed: () async {
+                final ok = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProductFormScreen(
+                      imagePath: widget.imagePath,
+                      ocrText: _extractedText,
+                    ),
+                  ),
+                );
+                if (ok == true && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Produto cadastrado com sucesso!')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.add_box),
+              label: const Text('Cadastrar como Produto'),
+            ),
+          ),
+
+
         ],
       ),
     );

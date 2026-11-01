@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+
 import 'core/constants/app_constants.dart';
-import 'features/ocr/presentation/screens/home_screen.dart';
+import 'features/product/presentation/screens/main_screen.dart';
 
 class PreVencApp extends StatelessWidget {
   const PreVencApp({super.key});
@@ -15,7 +16,7 @@ class PreVencApp extends StatelessWidget {
         useMaterial3: true,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const HomeScreen(),
+      home: const MainScreen(),
     );
   }
 }
