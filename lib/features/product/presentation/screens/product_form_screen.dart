@@ -36,6 +36,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   bool _saving = false;
   late ProductSource _source;
 
+  // Rastreia quais campos vieram do OCR/API (para destacar visualmente)
+  bool _nameAuto = false;
+  bool _barcodeAuto = false;
+  bool _loteAuto = false;
+  bool _fabAuto = false;
+  bool _expAuto = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +55,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       _manufacturingDate = p.manufacturingDate;
       _expirationDate = p.expirationDate;
       _source = p.source;
+      // Edição: tudo é "manual" daqui pra frente
     } else if (widget.suggestion != null) {
       final s = widget.suggestion!;
       _nameCtrl.text = s.name ?? '';
@@ -56,6 +64,11 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       _manufacturingDate = s.manufacturingDate;
       _expirationDate = s.expirationDate;
       _source = s.source;
+      _nameAuto = s.name != null;
+      _barcodeAuto = s.barcode != null;
+      _loteAuto = s.lote != null;
+      _fabAuto = s.manufacturingDate != null;
+      _expAuto = s.expirationDate != null;
     } else {
       _source = ProductSource.manual;
     }
@@ -86,8 +99,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       setState(() {
         if (isExpiration) {
           _expirationDate = picked;
+          _expAuto = false; // usuário escolheu manualmente
         } else {
           _manufacturingDate = picked;
+          _fabAuto = false;
         }
       });
     }
@@ -99,7 +114,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
     if (code != null && code.isNotEmpty) {
-      setState(() => _barcodeCtrl.text = code);
+      setState(() {
+        _barcodeCtrl.text = code;
+        _barcodeAuto = false;
+      });
     }
   }
 
@@ -169,32 +187,135 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       ProductSource.barcode => Colors.green,
       ProductSource.manual => Colors.grey,
     };
+    final label = switch (_source) {
+      ProductSource.ocr => '📷 Extraído por OCR',
+      ProductSource.barcode => '📊 Vindo do código de barras',
+      ProductSource.manual => '✏️ Cadastro manual',
+    };
+    return Chip(
+      avatar: const Icon(Icons.info_outline, size: 16),
+      label: Text(label, style: TextStyle(color: color, fontSize: 12)),
+      backgroundColor: color.withValues(alpha: 0.12),
+      side: BorderSide(color: color.withValues(alpha: 0.4)),
+    );
+  }
+
+  Widget _autoBadge() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.green.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        _source == ProductSource.ocr
-            ? '📷 Origem: OCR'
-            : _source == ProductSource.barcode
-                ? '📊 Origem: Código de barras'
-                : '✏️ Origem: Manual',
-        style: TextStyle(color: color, fontSize: 12),
+      child: const Text(
+        'auto',
+        style: TextStyle(
+          color: Colors.green,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewBanner() {
+    if (widget.existingProduct != null) return const SizedBox.shrink();
+
+    final hasAuto = _nameAuto || _barcodeAuto || _loteAuto || _fabAuto || _expAuto;
+    if (!hasAuto) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.shade300),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Dados extraídos automaticamente. Revise e edite '
+              'antes de salvar.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showOcrText() {
+    if (widget.ocrText == null || widget.ocrText!.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.3,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, scrollCtrl) => Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.text_snippet),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Texto original do OCR',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const Divider(),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollCtrl,
+                  child: SelectableText(
+                    widget.ocrText!,
+                    style: const TextStyle(fontSize: 13, height: 1.4),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasOcrText =
+        widget.ocrText != null && widget.ocrText!.trim().isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existingProduct == null
             ? 'Novo Produto'
             : 'Editar Produto'),
+        actions: [
+          if (hasOcrText)
+            IconButton(
+              icon: const Icon(Icons.text_snippet),
+              tooltip: 'Ver texto OCR',
+              onPressed: _showOcrText,
+            ),
+        ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(32),
+          preferredSize: const Size.fromHeight(36),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _buildSourceBadge(),
@@ -206,65 +327,105 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            _buildReviewBanner(),
+
+            // NOME
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Nome do produto *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.inventory_2),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.inventory_2),
+                suffixIcon: _nameAuto ? _autoBadge() : null,
               ),
+              onChanged: (_) => setState(() => _nameAuto = false),
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
             ),
             const SizedBox(height: 16),
 
+            // CÓDIGO DE BARRAS
             TextFormField(
               controller: _barcodeCtrl,
               decoration: InputDecoration(
                 labelText: 'Código de barras',
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.qr_code),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.camera_alt),
-                  tooltip: 'Escanear',
-                  onPressed: _scanBarcode,
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_barcodeAuto) _autoBadge(),
+                    IconButton(
+                      icon: const Icon(Icons.camera_alt),
+                      tooltip: 'Escanear',
+                      onPressed: _scanBarcode,
+                    ),
+                  ],
                 ),
               ),
               keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() => _barcodeAuto = false),
             ),
             const SizedBox(height: 16),
 
+            // LOTE
             TextFormField(
               controller: _loteCtrl,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Lote',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.numbers),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.numbers),
+                suffixIcon: _loteAuto ? _autoBadge() : null,
               ),
               textCapitalization: TextCapitalization.characters,
+              onChanged: (_) => setState(() => _loteAuto = false),
             ),
             const SizedBox(height: 16),
 
+            // FABRICAÇÃO
             ListTile(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4),
-                side: const BorderSide(color: Colors.grey),
+                side: BorderSide(
+                  color: _fabAuto ? Colors.green : Colors.grey,
+                  width: _fabAuto ? 2 : 1,
+                ),
               ),
               leading: const Icon(Icons.event_available),
-              title: const Text('Data de fabricação'),
+              title: Row(
+                children: [
+                  const Text('Data de fabricação'),
+                  if (_fabAuto) ...[
+                    const SizedBox(width: 8),
+                    _autoBadge(),
+                  ],
+                ],
+              ),
               subtitle: Text(_formatDate(_manufacturingDate)),
               trailing: const Icon(Icons.calendar_today),
               onTap: () => _pickDate(isExpiration: false),
             ),
             const SizedBox(height: 16),
 
+            // VALIDADE
             ListTile(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4),
-                side: const BorderSide(color: Colors.grey),
+                side: BorderSide(
+                  color: _expAuto ? Colors.green : Colors.grey,
+                  width: _expAuto ? 2 : 1,
+                ),
               ),
               leading: const Icon(Icons.event_busy),
-              title: const Text('Data de validade'),
+              title: Row(
+                children: [
+                  const Text('Data de validade'),
+                  if (_expAuto) ...[
+                    const SizedBox(width: 8),
+                    _autoBadge(),
+                  ],
+                ],
+              ),
               subtitle: Text(_formatDate(_expirationDate)),
               trailing: const Icon(Icons.calendar_today),
               onTap: () => _pickDate(isExpiration: true),

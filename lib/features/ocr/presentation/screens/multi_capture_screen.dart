@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/screens/product_form_screen.dart';
 import '../../../product/utils/product_parser.dart';
 import '../providers/ocr_providers.dart';
@@ -43,84 +42,157 @@ class _MultiCaptureScreenState extends ConsumerState<MultiCaptureScreen> {
   }
 
   Future<void> _processAll() async {
-    if (_paths.isEmpty) return;
-    setState(() {
-      _processing = true;
-      _processed = 0;
-    });
+  if (_paths.isEmpty) return;
+  setState(() {
+    _processing = true;
+    _processed = 0;
+  });
 
-    try {
-      // Mescla os dados de cada foto
-      String? name;
-      String? barcode;
-      String? lote;
-      DateTime? fabrication;
-      DateTime? expiration;
-      final allTexts = <String>[];
+  try {
+    ProductSuggestion? merged;
+    final allTexts = <String>[];
 
-      final extractText = ref.read(extractTextProvider);
+    final extractText = ref.read(extractTextProvider);
 
-      for (var i = 0; i < _paths.length; i++) {
-        try {
-          final text = await extractText(_paths[i]);
-          allTexts.add(text);
-
-          final suggestion = ProductParser.parse(text);
-          name ??= suggestion.name;
-          barcode ??= suggestion.barcode;
-          lote ??= suggestion.lote;
-          fabrication ??= suggestion.manufacturingDate;
-          expiration ??= suggestion.expirationDate;
-        } catch (_) {
-          // Se uma foto falhar, continua com as outras
-        }
-        if (mounted) setState(() => _processed = i + 1);
+    for (var i = 0; i < _paths.length; i++) {
+      try {
+        final text = await extractText(_paths[i]);
+        allTexts.add(text);
+        final suggestion = ProductParser.parse(text);
+        merged = ProductParser.merge(merged, suggestion);
+      } catch (_) {
+        // foto falhou, continua com as demais
       }
-
-      if (!mounted) return;
-
-      final mergedText = allTexts.join('\n\n---\n\n');
-      final finalSuggestion = ProductSuggestion(
-        name: name,
-        barcode: barcode,
-        lote: lote,
-        manufacturingDate: fabrication,
-        expirationDate: expiration,
-        source: ProductSource.ocr,
-      );
-
-      if (finalSuggestion.hasAnyField) {
-        // Tem dados → abre o form pré-preenchido
-        final ok = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProductFormScreen(
-              suggestion: finalSuggestion,
-              imagePath: _paths.first,
-              ocrText: mergedText,
-            ),
-          ),
-        );
-        if (ok == true && mounted) {
-          Navigator.pop(context); // volta à lista de produtos
-        }
-      } else {
-        // Nenhum campo reconhecido → abre form manual com texto
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProductFormScreen(
-              imagePath: _paths.first,
-              ocrText: mergedText,
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _processing = false);
+      if (mounted) setState(() => _processed = i + 1);
     }
+
+    if (!mounted) return;
+
+    final mergedText = allTexts.join('\n\n---\n\n');
+
+    if (merged == null) {
+      // Nenhuma foto gerou dados — abre form manual
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProductFormScreen(
+            imagePath: _paths.first,
+            ocrText: mergedText,
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Mostra um diálogo de revisão antes de abrir o form
+    final proceed = await _showReviewDialog(merged);
+    if (proceed != true || !mounted) return;
+
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductFormScreen(
+          suggestion: merged,
+          imagePath: _paths.first,
+          ocrText: mergedText,
+        ),
+      ),
+    );
+
+    if (ok == true && mounted) {
+      Navigator.pop(context); // volta à lista de produtos
+    }
+  } finally {
+    if (mounted) setState(() => _processing = false);
   }
+}
+
+Future<bool?> _showReviewDialog(ProductSuggestion s) {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green),
+          SizedBox(width: 8),
+          Text('Dados extraídos'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Confira os dados antes de continuar. '
+            'Você poderá editá-los na próxima tela.',
+            style: TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          _reviewRow(Icons.inventory_2, 'Nome', s.name),
+          _reviewRow(Icons.qr_code, 'Código', s.barcode),
+          _reviewRow(Icons.numbers, 'Lote', s.lote),
+          _reviewRow(
+            Icons.event_available,
+            'Fabricação',
+            _fmt(s.manufacturingDate),
+          ),
+          _reviewRow(
+            Icons.event_busy,
+            'Validade',
+            _fmt(s.expirationDate),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Revisar e editar'),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _reviewRow(IconData icon, String label, String? value) {
+  final found = value != null && value.isNotEmpty;
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: found ? Colors.green : Colors.grey.shade400,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        ),
+        Expanded(
+          child: Text(
+            found ? value : '—',
+            style: TextStyle(
+              fontSize: 13,
+              color: found ? Colors.black87 : Colors.grey,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+String? _fmt(DateTime? d) {
+  if (d == null) return null;
+  return '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/${d.year}';
+}
 
   @override
   Widget build(BuildContext context) {
