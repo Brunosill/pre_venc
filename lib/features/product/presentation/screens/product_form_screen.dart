@@ -8,12 +8,14 @@ import '../providers/product_providers.dart';
 import 'barcode_scanner_screen.dart';
 
 class ProductFormScreen extends ConsumerStatefulWidget {
+  final ProductSuggestion? suggestion;
   final String? imagePath;
   final String? ocrText;
   final Product? existingProduct;
 
   const ProductFormScreen({
     super.key,
+    this.suggestion,
     this.imagePath,
     this.ocrText,
     this.existingProduct,
@@ -27,10 +29,12 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _barcodeCtrl = TextEditingController();
+  final _loteCtrl = TextEditingController();
 
   DateTime? _manufacturingDate;
   DateTime? _expirationDate;
   bool _saving = false;
+  late ProductSource _source;
 
   @override
   void initState() {
@@ -40,14 +44,20 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       final p = widget.existingProduct!;
       _nameCtrl.text = p.name;
       _barcodeCtrl.text = p.barcode ?? '';
+      _loteCtrl.text = p.lote ?? '';
       _manufacturingDate = p.manufacturingDate;
       _expirationDate = p.expirationDate;
-    } else if (widget.ocrText != null) {
-      final suggestion = ProductParser.parse(widget.ocrText!);
-      _nameCtrl.text = suggestion.name ?? '';
-      _barcodeCtrl.text = suggestion.barcode ?? '';
-      _manufacturingDate = suggestion.manufacturingDate;
-      _expirationDate = suggestion.expirationDate;
+      _source = p.source;
+    } else if (widget.suggestion != null) {
+      final s = widget.suggestion!;
+      _nameCtrl.text = s.name ?? '';
+      _barcodeCtrl.text = s.barcode ?? '';
+      _loteCtrl.text = s.lote ?? '';
+      _manufacturingDate = s.manufacturingDate;
+      _expirationDate = s.expirationDate;
+      _source = s.source;
+    } else {
+      _source = ProductSource.manual;
     }
   }
 
@@ -55,6 +65,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _barcodeCtrl.dispose();
+    _loteCtrl.dispose();
     super.dispose();
   }
 
@@ -94,7 +105,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _saving = true);
 
     try {
@@ -105,11 +115,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           barcode: _barcodeCtrl.text.trim().isEmpty
               ? null
               : _barcodeCtrl.text.trim(),
+          lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
           manufacturingDate: _manufacturingDate,
           expirationDate: _expirationDate,
           imagePath: widget.existingProduct!.imagePath,
           ocrText: widget.existingProduct!.ocrText,
           createdAt: widget.existingProduct!.createdAt,
+          source: _source,
         );
         await ref.read(updateProductProvider)(updated);
       } else {
@@ -119,11 +131,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           barcode: _barcodeCtrl.text.trim().isEmpty
               ? null
               : _barcodeCtrl.text.trim(),
+          lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
           manufacturingDate: _manufacturingDate,
           expirationDate: _expirationDate,
           imagePath: widget.imagePath,
           ocrText: widget.ocrText,
           createdAt: DateTime.now(),
+          source: _source,
         );
         await ref.read(addProductProvider)(product);
       }
@@ -149,6 +163,29 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         '${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
+  Widget _buildSourceBadge() {
+    final color = switch (_source) {
+      ProductSource.ocr => Colors.blue,
+      ProductSource.barcode => Colors.green,
+      ProductSource.manual => Colors.grey,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        _source == ProductSource.ocr
+            ? '📷 Origem: OCR'
+            : _source == ProductSource.barcode
+                ? '📊 Origem: Código de barras'
+                : '✏️ Origem: Manual',
+        style: TextStyle(color: color, fontSize: 12),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,6 +193,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         title: Text(widget.existingProduct == null
             ? 'Novo Produto'
             : 'Editar Produto'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(32),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildSourceBadge(),
+          ),
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -173,6 +217,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
             ),
             const SizedBox(height: 16),
+
             TextFormField(
               controller: _barcodeCtrl,
               decoration: InputDecoration(
@@ -188,6 +233,18 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 16),
+
+            TextFormField(
+              controller: _loteCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Lote',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.numbers),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+            const SizedBox(height: 16),
+
             ListTile(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4),
@@ -200,6 +257,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               onTap: () => _pickDate(isExpiration: false),
             ),
             const SizedBox(height: 16),
+
             ListTile(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4),
@@ -212,6 +270,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               onTap: () => _pickDate(isExpiration: true),
             ),
             const SizedBox(height: 32),
+
             SizedBox(
               height: 48,
               child: ElevatedButton.icon(

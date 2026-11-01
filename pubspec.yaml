@@ -54,6 +54,8 @@ dependencies:
   intl: ^0.20.3
 
   mobile_scanner: ^6.0.2
+  http: ^1.2.2
+  
 
 dev_dependencies:
   flutter_test:

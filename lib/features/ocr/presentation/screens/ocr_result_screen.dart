@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../product/utils/product_parser.dart';
 import '../../../product/presentation/screens/product_form_screen.dart';
 import '../../domain/entities/ocr_result.dart';
 import '../providers/ocr_providers.dart';
@@ -242,10 +243,12 @@ class _OcrResultScreenState extends ConsumerState<OcrResultScreen> {
                 foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
               ),
               onPressed: () async {
+                final suggestion = ProductParser.parse(_extractedText!);
                 final ok = await Navigator.push<bool>(
                   context,
                   MaterialPageRoute(
                     builder: (_) => ProductFormScreen(
+                      suggestion: suggestion,
                       imagePath: widget.imagePath,
                       ocrText: _extractedText,
                     ),

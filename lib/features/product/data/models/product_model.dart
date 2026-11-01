@@ -26,6 +26,12 @@ class ProductModel extends HiveObject {
   @HiveField(7)
   final DateTime createdAt;
 
+  @HiveField(8)
+  final String? lote;
+
+  @HiveField(9)
+  final int sourceIndex; // 0=ocr, 1=barcode, 2=manual
+
   ProductModel({
     required this.id,
     required this.name,
@@ -35,6 +41,8 @@ class ProductModel extends HiveObject {
     this.imagePath,
     this.ocrText,
     required this.createdAt,
+    this.lote,
+    this.sourceIndex = 2, // manual por padrão
   });
 }
 
@@ -57,13 +65,16 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       imagePath: fields[5] as String?,
       ocrText: fields[6] as String?,
       createdAt: fields[7] as DateTime,
+      // Compatível com produtos antigos (campos 8 e 9 podem ser null)
+      lote: fields[8] as String?,
+      sourceIndex: (fields[9] as int?) ?? 2,
     );
   }
 
   @override
   void write(BinaryWriter writer, ProductModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(10)
       ..writeByte(0)..write(obj.id)
       ..writeByte(1)..write(obj.name)
       ..writeByte(2)..write(obj.barcode)
@@ -71,6 +82,8 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       ..writeByte(4)..write(obj.expirationDate)
       ..writeByte(5)..write(obj.imagePath)
       ..writeByte(6)..write(obj.ocrText)
-      ..writeByte(7)..write(obj.createdAt);
+      ..writeByte(7)..write(obj.createdAt)
+      ..writeByte(8)..write(obj.lote)
+      ..writeByte(9)..write(obj.sourceIndex);
   }
 }
