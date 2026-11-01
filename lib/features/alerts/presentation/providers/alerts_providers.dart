@@ -14,7 +14,7 @@ final alertSettingsBoxProvider =
 
 // Scheduler
 final alertSchedulerProvider = Provider<AlertScheduler>((ref) {
-  return AlertScheduler();
+  return AlertScheduler(notifications: FlutterNotificationScheduler());
 });
 
 // Configurações atuais (reativo)
