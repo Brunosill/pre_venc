@@ -1,4 +1,4 @@
-package com.example.pre_venc
+package br.com.prevenc.pre_venc
 
 import io.flutter.embedding.android.FlutterActivity
 
