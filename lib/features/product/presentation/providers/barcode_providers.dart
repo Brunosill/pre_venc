@@ -12,14 +12,14 @@ import '../../data/services/open_beauty_facts_service.dart';
 import '../../data/services/open_food_facts_service.dart';
 
 final barcodeCacheBoxProvider =
-Provider<Box<BarcodeCacheModel>>((ref) => HiveBoxes.barcodeCacheBox);
+    Provider<Box<BarcodeCacheModel>>((ref) => HiveBoxes.barcodeCacheBox);
 
 final barcodeCacheServiceProvider = Provider<BarcodeCacheService>((ref) {
   return BarcodeCacheService(ref.watch(barcodeCacheBoxProvider));
 });
 
 final medicamentosApiKeyProvider = Provider<String>(
-      (ref) => const String.fromEnvironment('MEDICAMENTOS_API_KEY'),
+  (ref) => const String.fromEnvironment('MEDICAMENTOS_API_KEY'),
 );
 
 final barcodeOrchestratorProvider = Provider<BarcodeLookupOrchestrator>((ref) {
@@ -33,9 +33,8 @@ final barcodeOrchestratorProvider = Provider<BarcodeLookupOrchestrator>((ref) {
   );
 });
 
-/// Serviço de contribuição ao catálogo (null se Supabase não configurado).
 final catalogContributionServiceProvider =
-Provider<CatalogContributionService?>((ref) {
+    Provider<CatalogContributionService?>((ref) {
   final client = ref.watch(supabaseClientProvider);
   if (client == null) return null;
   return CatalogContributionService(client);

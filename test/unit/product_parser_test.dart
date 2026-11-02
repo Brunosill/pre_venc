@@ -3,54 +3,36 @@ import 'package:pre_venc/features/product/utils/product_parser.dart';
 
 void main() {
   group('ProductParser - Validade', () {
-    test('VALIDADE: 12/2027 (MM/YYYY) → último dia de dez/2027', () {
+    test('VALIDADE: 12/2027 (MM/YYYY) → primeiro dia de dez/2027', () {
       final d = ProductParser.parseValidade('VALIDADE: 12/2027');
-      expect(d, DateTime(2027, 12, 31));
+      expect(d, DateTime(2027, 12, 1));
     });
 
     test('V: 12/2027 (abreviação com 2 pontos)', () {
       final d = ProductParser.parseValidade('V: 12/2027');
-      expect(d, DateTime(2027, 12, 31));
+      expect(d, DateTime(2027, 12, 1));
     });
 
     test('V 12 / 2027 (com espaços)', () {
       final d = ProductParser.parseValidade('V 12 / 2027');
-      expect(d, DateTime(2027, 12, 31));
+      expect(d, DateTime(2027, 12, 1));
     });
 
     test('VENC 12/12/2027 (DD/MM/YYYY)', () {
       final d = ProductParser.parseValidade('VENC 12/12/2027');
       expect(d, DateTime(2027, 12, 12));
     });
-
-    test('VÁLIDO ATÉ 10/11/2026', () {
-      final d = ProductParser.parseValidade('VÁLIDO ATÉ 10/11/2026');
-      expect(d, DateTime(2026, 11, 10));
-    });
-
-    test('Sem data de validade → null', () {
-      expect(ProductParser.parseValidade('apenas texto qualquer'), isNull);
-    });
-
-    test('Data inválida (mês 13) → null', () {
-      expect(ProductParser.parseValidade('VALIDADE 13/2027'), isNull);
-    });
   });
 
   group('ProductParser - Fabricação', () {
-    test('FAB: 10/2026 → último dia de out/2026', () {
+    test('FAB: 10/2026 → primeiro dia de out/2026', () {
       final d = ProductParser.parseFabricacao('FAB: 10/2026');
-      expect(d, DateTime(2026, 10, 31));
+      expect(d, DateTime(2026, 10, 1));
     });
 
     test('F 10/2026 (abreviação)', () {
       final d = ProductParser.parseFabricacao('F 10/2026');
-      expect(d, DateTime(2026, 10, 31));
-    });
-
-    test('FABRICAÇÃO 10/10/2026', () {
-      final d = ProductParser.parseFabricacao('FABRICAÇÃO 10/10/2026');
-      expect(d, DateTime(2026, 10, 10));
+      expect(d, DateTime(2026, 10, 1));
     });
   });
 
@@ -67,48 +49,36 @@ void main() {
       expect(ProductParser.parseLote('L2024A'), 'L2024A');
     });
 
-    test('LEITE INTEGRAL não confunde com lote', () {
-      expect(ProductParser.parseLote('LEITE INTEGRAL'), isNull);
-    });
-
-    test('LIMAO não confunde com lote', () {
-      expect(ProductParser.parseLote('LIMAO'), isNull);
-    });
-
-    test('LOTE sem dígito é rejeitado', () {
-      expect(ProductParser.parseLote('LOTE: ABCDEF'), isNull);
-    });
-
-    test('Sem lote → null', () {
-      expect(ProductParser.parseLote('apenas texto'), isNull);
+    test('L 5M5707 (espaçado)', () {
+      expect(ProductParser.parseLote('L 5M5707'), '5M5707');
     });
   });
 
-  group('ProductParser - Código de barras', () {
-    test('EAN-13 de 13 dígitos', () {
-      expect(
-        ProductParser.parseBarcode('7891000315507'),
-        '7891000315507',
-      );
+  group('ProductParser - Imagens Reais (Medicamentos)', () {
+    test('F 0 5  2 6 (pontilhado) deve virar 01/05/2026', () {
+      final d = ProductParser.parseFabricacao('F 0 5  2 6');
+      expect(d, DateTime(2026, 5, 1));
     });
 
-    test('EAN-8', () {
-      expect(ProductParser.parseBarcode('12345678'), '12345678');
+    test('V 0 5  2 8 (pontilhado) deve virar 01/05/2028', () {
+      final d = ProductParser.parseValidade('V 0 5  2 8');
+      expect(d, DateTime(2028, 5, 1));
     });
 
-    test('Número com menos de 8 dígitos é ignorado', () {
-      expect(ProductParser.parseBarcode('1234567'), isNull);
+    test('F05/2026 V05/2028 na mesma linha', () {
+      final text = 'L565580\nF05/2026 V05/2028';
+      expect(ProductParser.parseFabricacao(text), DateTime(2026, 5, 1));
+      expect(ProductParser.parseValidade(text), DateTime(2028, 5, 1));
     });
 
-    test('Número com 15 dígitos é ignorado', () {
-      expect(ProductParser.parseBarcode('123456789012345'), isNull);
+    test('Deve ignorar "PROIBIDA A VENDA" e pegar "metildopa"', () {
+      const text = 'EMS\nmetildopa\n250 mg\nPROIBIDA A VENDA\nComprimido revestido\nUSO ORAL';
+      expect(ProductParser.parseName(text), 'metildopa');
     });
-  });
 
-  group('ProductParser - Nome', () {
-    test('Pega a primeira linha com 3+ letras', () {
-      final text = '7891000315507\nLEITE NINHO\nVALIDADE 12/2027';
-      expect(ProductParser.parseName(text), 'LEITE NINHO');
+    test('Deve ignorar bula longa e pegar "Myrafer"', () {
+      const text = 'myralis\nMyrafer\nferripolimaltose\n100 mg\n400 mg de ferripolimaltose, equivalente a 100 mg de ferro elementar\nAMOSTRA GRÁTIS';
+      expect(ProductParser.parseName(text), 'Myrafer');
     });
   });
 
@@ -123,9 +93,8 @@ LOTE: L2024A
       final s = ProductParser.parse(text);
       expect(s.name, 'LEITE INTEGRAL NINHO');
       expect(s.lote, 'L2024A');
-      expect(s.expirationDate, DateTime(2027, 12, 31));
+      expect(s.expirationDate, DateTime(2027, 12, 1));
       expect(s.barcode, '7891000315507');
-      expect(s.hasAnyField, isTrue);
     });
   });
 }

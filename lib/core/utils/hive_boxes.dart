@@ -1,24 +1,27 @@
 import 'package:hive/hive.dart';
-import '../../features/alerts/data/models/alert_settings_model.dart';
-import '../../features/ocr/data/models/ocr_result_model.dart';
-import '../../features/product/data/models/product_model.dart';
+import '../../features/product/data/models/raw_product_data.dart';
+import '../../features/product/data/models/inventory_item.dart';
 import '../../features/product/data/models/barcode_cache_model.dart';
+import '../../features/alerts/data/models/alert_settings_model.dart';
 
 class HiveBoxes {
-  static const String ocrResults = 'ocr_results';
-  static const String products = 'products';
-  static const String alertSettings = 'alert_settings';
-  static const String barcodeCache = 'barcode_cache';
+  // Novas boxes
+  static const String rawProducts = 'raw_products';
+  static const String inventoryItems = 'inventory_items';
   
+  // Boxes mantidas
+  static const String barcodeCache = 'barcode_cache';
+  static const String alertSettings = 'alert_settings';
+
+  static late Box<RawProductData> rawProductBox;
+  static late Box<InventoryItem> inventoryItemBox;
   static late Box<BarcodeCacheModel> barcodeCacheBox;
-  static late Box<OcrResultModel> ocrResultBox;
-  static late Box<ProductModel> productBox;
   static late Box<AlertSettingsModel> alertSettingsBox;
 
   static Future<void> init() async {
-    ocrResultBox = await Hive.openBox<OcrResultModel>(ocrResults);
-    productBox = await Hive.openBox<ProductModel>(products);
-    alertSettingsBox = await Hive.openBox<AlertSettingsModel>(alertSettings);
+    rawProductBox = await Hive.openBox<RawProductData>(rawProducts);
+    inventoryItemBox = await Hive.openBox<InventoryItem>(inventoryItems);
     barcodeCacheBox = await Hive.openBox<BarcodeCacheModel>(barcodeCache);
+    alertSettingsBox = await Hive.openBox<AlertSettingsModel>(alertSettings);
   }
 }

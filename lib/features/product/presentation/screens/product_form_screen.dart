@@ -1,25 +1,23 @@
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../domain/entities/product.dart';
-import '../../utils/product_parser.dart';
+import '../../../ocr/presentation/screens/multi_capture_screen.dart';
+import '../../data/models/inventory_item.dart';
 import '../providers/barcode_providers.dart';
-import '../providers/product_providers.dart';
+import '../providers/inventory_providers.dart';
 import 'barcode_scanner_screen.dart';
 
 class ProductFormScreen extends ConsumerStatefulWidget {
-  final ProductSuggestion? suggestion;
-  final String? imagePath;
-  final String? ocrText;
-  final Product? existingProduct;
+  final String? initialBarcode;
+  final InventoryItem? existingItem;
 
   const ProductFormScreen({
     super.key,
-    this.suggestion,
-    this.imagePath,
-    this.ocrText,
-    this.existingProduct,
+    this.initialBarcode,
+    this.existingItem,
   });
 
   @override
@@ -31,61 +29,80 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   final _nameCtrl = TextEditingController();
   final _barcodeCtrl = TextEditingController();
   final _loteCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  final _quantityCtrl = TextEditingController(text: '1');
 
+  int _type = 0; // 0=Alimento, 1=Medicamento, 2=Beleza
   DateTime? _manufacturingDate;
   DateTime? _expirationDate;
-  bool _saving = false;
-  late ProductSource _source;
+  String _unit = 'un';
 
-  bool _nameAuto = false;
-  bool _barcodeAuto = false;
-  bool _loteAuto = false;
-  bool _fabAuto = false;
-  bool _expAuto = false;
+  String? _ocrText1;
+  String? _ocrText2;
+  int _source = 2; // 0=OCR, 1=Barcode, 2=Manual
+
+  bool _loadingInitial = false;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-
-    if (widget.existingProduct != null) {
-      final p = widget.existingProduct!;
-      _nameCtrl.text = p.name;
-      _barcodeCtrl.text = p.barcode ?? '';
-      _loteCtrl.text = p.lote ?? '';
-      _manufacturingDate = p.manufacturingDate;
-      _expirationDate = p.expirationDate;
-      _source = p.source;
-    } else if (widget.suggestion != null) {
-      final s = widget.suggestion!;
-      _nameCtrl.text = s.name ?? '';
-      _barcodeCtrl.text = s.barcode ?? '';
-      _loteCtrl.text = s.lote ?? '';
-      _manufacturingDate = s.manufacturingDate;
-      _expirationDate = s.expirationDate;
-      _source = s.source;
-      _nameAuto = s.name != null;
-      _barcodeAuto = s.barcode != null;
-      _loteAuto = s.lote != null;
-      _fabAuto = s.manufacturingDate != null;
-      _expAuto = s.expirationDate != null;
-    } else {
-      _source = ProductSource.manual;
+    if (widget.existingItem != null) {
+      _loadFromExisting(widget.existingItem!);
+    } else if (widget.initialBarcode != null && widget.initialBarcode!.isNotEmpty) {
+      _barcodeCtrl.text = widget.initialBarcode!;
+      _fetchByBarcode(widget.initialBarcode!);
     }
   }
 
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _barcodeCtrl.dispose();
-    _loteCtrl.dispose();
-    super.dispose();
+  void _loadFromExisting(InventoryItem item) {
+    _nameCtrl.text = item.name;
+    _barcodeCtrl.text = item.barcode ?? '';
+    _loteCtrl.text = item.lote ?? '';
+    _notesCtrl.text = item.notes ?? '';
+    _quantityCtrl.text = item.quantity.toString();
+    _type = item.type;
+    _manufacturingDate = item.manufacturingDate;
+    _expirationDate = item.expirationDate;
+    _unit = item.unit ?? 'un';
+    _source = item.source;
+  }
+
+  Future<void> _fetchByBarcode(String barcode) async {
+    setState(() => _loadingInitial = true);
+    try {
+      final orchestrator = ref.read(barcodeOrchestratorProvider);
+      final result = await orchestrator.lookupAuto(barcode);
+
+      if (!mounted) return;
+      if (result != null) {
+        final name = result['name'] as String?;
+        final brand = result['brand'] as String?;
+        final category = result['category'] as String?;
+
+        if (name != null && name.trim().isNotEmpty) {
+          setState(() {
+            _nameCtrl.text = brand != null && brand.isNotEmpty
+                ? '$name ($brand)'
+                : name.trim();
+            if (category == 'food') _type = 0;
+            if (category == 'medicine') _type = 1;
+            if (category == 'beauty') _type = 2;
+            _source = 1;
+          });
+        }
+      }
+    } catch (_) {
+      // silencioso, usuário digita manualmente
+    } finally {
+      if (mounted) setState(() => _loadingInitial = false);
+    }
   }
 
   Future<void> _pickDate({required bool isExpiration}) async {
-    final now = DateTime.now();
     final initial = isExpiration
-        ? (_expirationDate ?? now.add(const Duration(days: 180)))
-        : (_manufacturingDate ?? now);
+        ? (_expirationDate ?? DateTime.now().add(const Duration(days: 180)))
+        : (_manufacturingDate ?? DateTime.now());
 
     final picked = await showDatePicker(
       context: context,
@@ -98,10 +115,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       setState(() {
         if (isExpiration) {
           _expirationDate = picked;
-          _expAuto = false;
         } else {
           _manufacturingDate = picked;
-          _fabAuto = false;
         }
       });
     }
@@ -115,57 +130,83 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     if (code != null && code.isNotEmpty) {
       setState(() {
         _barcodeCtrl.text = code;
-        _barcodeAuto = false;
+        _source = 1;
       });
+      await _fetchByBarcode(code);
     }
+  }
+
+  Future<void> _useOcr() async {
+    final result = await Navigator.push<CaptureResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MultiCaptureScreen(barcode: _barcodeCtrl.text),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() {
+      if (result.suggestion.name != null && result.suggestion.name!.isNotEmpty) {
+        _nameCtrl.text = result.suggestion.name!;
+      }
+      if (result.suggestion.lote != null) {
+        _loteCtrl.text = result.suggestion.lote!;
+      }
+      if (result.suggestion.manufacturingDate != null) {
+        _manufacturingDate = result.suggestion.manufacturingDate;
+      }
+      if (result.suggestion.expirationDate != null) {
+        _expirationDate = result.suggestion.expirationDate;
+      }
+
+      _ocrText1 = result.ocrText1;
+      _ocrText2 = result.ocrText2;
+      _source = 0;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Dados extraídos. Revise antes de salvar.')),
+    );
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
     setState(() => _saving = true);
 
     try {
-      if (widget.existingProduct != null) {
-        final updated = Product(
-          id: widget.existingProduct!.id,
-          name: _nameCtrl.text.trim(),
-          barcode: _barcodeCtrl.text.trim().isEmpty
-              ? null
-              : _barcodeCtrl.text.trim(),
-          lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
-          manufacturingDate: _manufacturingDate,
-          expirationDate: _expirationDate,
-          imagePath: widget.existingProduct!.imagePath,
-          ocrText: widget.existingProduct!.ocrText,
-          createdAt: widget.existingProduct!.createdAt,
-          source: _source,
-        );
-        await ref.read(updateProductProvider)(updated);
-      } else {
-        final product = Product(
-          id: const Uuid().v4(),
-          name: _nameCtrl.text.trim(),
-          barcode: _barcodeCtrl.text.trim().isEmpty
-              ? null
-              : _barcodeCtrl.text.trim(),
-          lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
-          manufacturingDate: _manufacturingDate,
-          expirationDate: _expirationDate,
-          imagePath: widget.imagePath,
-          ocrText: widget.ocrText,
-          createdAt: DateTime.now(),
-          source: _source,
-        );
-        await ref.read(addProductProvider)(product);
+      final qty = double.tryParse(_quantityCtrl.text) ?? 1.0;
+      final now = DateTime.now();
 
-        // Oferece contribuição ao catálogo (só produto novo)
-        await _offerCatalogContribution(product);
+      final item = InventoryItem(
+        id: widget.existingItem?.id ?? const Uuid().v4(),
+        userId: widget.existingItem?.userId,
+        barcode: _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
+        type: _type,
+        name: _nameCtrl.text.trim(),
+        lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
+        manufacturingDate: _manufacturingDate,
+        expirationDate: _expirationDate,
+        quantity: qty,
+        unit: _unit,
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        source: _source,
+        createdAt: widget.existingItem?.createdAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+        isDraft: false,
+      );
+
+      if (widget.existingItem != null) {
+        await ref.read(updateItemProvider)(item);
+      } else {
+        await ref.read(addItemProvider)(item);
       }
 
       if (!mounted) return;
-      Navigator.pop(context, true);
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Produto salvo!')),
+        SnackBar(content: Text(widget.existingItem != null ? 'Item atualizado!' : 'Produto cadastrado!')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -177,318 +218,254 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     }
   }
 
-  Future<void> _offerCatalogContribution(Product product) async {
-    if (product.barcode == null || product.barcode!.isEmpty) return;
-    if (widget.existingProduct != null) return;
-
-    final contributionService =
-    ref.read(catalogContributionServiceProvider);
-    if (contributionService == null) return;
-
-    final alreadyIn =
-    await contributionService.isInCatalog(product.barcode!);
-    if (alreadyIn) return;
-
-    if (!mounted) return;
-
-    final wants = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Contribuir ao catálogo?'),
-        content: Text(
-          'O código ${product.barcode} ainda não está no catálogo público. '
-              'Deseja compartilhar o nome "${product.name}" para ajudar outros '
-              'usuários?\n\n'
-              'Nenhum dado pessoal (validade, lote) será compartilhado.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Não'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Contribuir'),
-          ),
-        ],
-      ),
-    );
-
-    if (wants == true) {
-      final ok = await contributionService.contribute(product);
-      if (!mounted) return;
-      if (ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Obrigado! Produto adicionado ao catálogo.'),
-          ),
-        );
-      }
-    }
-  }
-
   String _formatDate(DateTime? date) {
-    if (date == null) return 'Selecionar data';
-    return '${date.day.toString().padLeft(2, '0')}/'
-        '${date.month.toString().padLeft(2, '0')}/${date.year}';
+    if (date == null) return 'Selecionar';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
-  Widget _buildSourceBadge() {
-    final color = switch (_source) {
-      ProductSource.ocr => Colors.blue,
-      ProductSource.barcode => Colors.green,
-      ProductSource.manual => Colors.grey,
-    };
-    final label = switch (_source) {
-      ProductSource.ocr => '📷 Extraído por OCR',
-      ProductSource.barcode => '📊 Vindo do código de barras',
-      ProductSource.manual => '✏️ Cadastro manual',
-    };
-    return Chip(
-      avatar: const Icon(Icons.info_outline, size: 16),
-      label: Text(label, style: TextStyle(color: color, fontSize: 12)),
-      backgroundColor: color.withValues(alpha: 0.12),
-      side: BorderSide(color: color.withValues(alpha: 0.4)),
-    );
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _barcodeCtrl.dispose();
+    _loteCtrl.dispose();
+    _notesCtrl.dispose();
+    _quantityCtrl.dispose();
+    super.dispose();
   }
 
-  Widget _autoBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Text(
-        'auto',
-        style: TextStyle(
-          color: Colors.green,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReviewBanner() {
-    if (widget.existingProduct != null) return const SizedBox.shrink();
-
-    final hasAuto =
-        _nameAuto || _barcodeAuto || _loteAuto || _fabAuto || _expAuto;
-    if (!hasAuto) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.amber.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.amber.shade300),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Dados extraídos automaticamente. Revise e edite '
-                  'antes de salvar.',
-              style: TextStyle(fontSize: 13),
-            ),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.existingItem == null ? 'Novo Produto' : 'Editar Produto'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.camera_alt),
+            tooltip: 'Extrair do OCR',
+            onPressed: _useOcr,
           ),
+          if (_ocrText1 != null || _ocrText2 != null)
+            IconButton(
+              icon: const Icon(Icons.text_snippet),
+              tooltip: 'Ver texto OCR',
+              onPressed: () => _showOcrText(context),
+            ),
         ],
       ),
+      body: _loadingInitial
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Buscando produto...'),
+                ],
+              ),
+            )
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Tipo
+                  const Text('Tipo do produto', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      _buildTypeChip('🍎 Alimento', 0),
+                      _buildTypeChip('💊 Medicamento', 1),
+                      _buildTypeChip('🧴 Beleza', 2),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Nome
+                  TextFormField(
+                    controller: _nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome do produto *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.inventory_2),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Código de barras
+                  TextFormField(
+                    controller: _barcodeCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Código de barras',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.qr_code),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.camera_alt),
+                        onPressed: _scanBarcode,
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Lote
+                  TextFormField(
+                    controller: _loteCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Lote',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.numbers),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Datas
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: const BorderSide(color: Colors.grey),
+                    ),
+                    leading: const Icon(Icons.event_available),
+                    title: const Text('Data de fabricação'),
+                    subtitle: Text(_formatDate(_manufacturingDate)),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () => _pickDate(isExpiration: false),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: const BorderSide(color: Colors.grey),
+                    ),
+                    leading: const Icon(Icons.event_busy),
+                    title: const Text('Data de validade'),
+                    subtitle: Text(_formatDate(_expirationDate)),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () => _pickDate(isExpiration: true),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Quantidade + Unidade
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _quantityCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Quantidade',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d\.]'))],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _unit,
+                          decoration: const InputDecoration(
+                            labelText: 'Unidade',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'un', child: Text('un')),
+                            DropdownMenuItem(value: 'kg', child: Text('kg')),
+                            DropdownMenuItem(value: 'g', child: Text('g')),
+                            DropdownMenuItem(value: 'L', child: Text('L')),
+                            DropdownMenuItem(value: 'ml', child: Text('ml')),
+                            DropdownMenuItem(value: 'mg', child: Text('mg')),
+                            DropdownMenuItem(value: 'cx', child: Text('cx')),
+                          ],
+                          onChanged: (v) => setState(() => _unit = v ?? 'un'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Notas
+                  TextFormField(
+                    controller: _notesCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Observações',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.notes),
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Salvar
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check),
+                      label: Text(_saving ? 'Salvando...' : 'Salvar produto'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
-  void _showOcrText() {
-    if (widget.ocrText == null || widget.ocrText!.isEmpty) return;
+  Widget _buildTypeChip(String label, int value) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _type == value,
+      onSelected: (_) => setState(() => _type = value),
+    );
+  }
+
+  void _showOcrText(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.7,
-        minChildSize: 0.3,
-        maxChildSize: 0.95,
         expand: false,
         builder: (ctx, scrollCtrl) => Container(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.text_snippet),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Texto original do OCR',
-                    style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
+              const Text(
+                'Texto original do OCR',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const Divider(),
               Expanded(
-                child: SingleChildScrollView(
+                child: ListView(
                   controller: scrollCtrl,
-                  child: SelectableText(
-                    widget.ocrText!,
-                    style: const TextStyle(fontSize: 13, height: 1.4),
-                  ),
+                  children: [
+                    if (_ocrText1 != null) ...[
+                      const Text('Foto 1 (frente):', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      SelectableText(_ocrText1!, style: const TextStyle(fontSize: 13)),
+                      const SizedBox(height: 16),
+                    ],
+                    if (_ocrText2 != null) ...[
+                      const Text('Foto 2 (verso):', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      SelectableText(_ocrText2!, style: const TextStyle(fontSize: 13)),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasOcrText =
-        widget.ocrText != null && widget.ocrText!.trim().isNotEmpty;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.existingProduct == null
-            ? 'Novo Produto'
-            : 'Editar Produto'),
-        actions: [
-          if (hasOcrText)
-            IconButton(
-              icon: const Icon(Icons.text_snippet),
-              tooltip: 'Ver texto OCR',
-              onPressed: _showOcrText,
-            ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(36),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _buildSourceBadge(),
-          ),
-        ),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildReviewBanner(),
-            TextFormField(
-              controller: _nameCtrl,
-              decoration: InputDecoration(
-                labelText: 'Nome do produto *',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.inventory_2),
-                suffixIcon: _nameAuto ? _autoBadge() : null,
-              ),
-              onChanged: (_) => setState(() => _nameAuto = false),
-              validator: (v) =>
-              (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _barcodeCtrl,
-              decoration: InputDecoration(
-                labelText: 'Código de barras',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.qr_code),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_barcodeAuto) _autoBadge(),
-                    IconButton(
-                      icon: const Icon(Icons.camera_alt),
-                      tooltip: 'Escanear',
-                      onPressed: _scanBarcode,
-                    ),
-                  ],
-                ),
-              ),
-              keyboardType: TextInputType.number,
-              onChanged: (_) => setState(() => _barcodeAuto = false),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _loteCtrl,
-              decoration: InputDecoration(
-                labelText: 'Lote',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.numbers),
-                suffixIcon: _loteAuto ? _autoBadge() : null,
-              ),
-              textCapitalization: TextCapitalization.characters,
-              onChanged: (_) => setState(() => _loteAuto = false),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-                side: BorderSide(
-                  color: _fabAuto ? Colors.green : Colors.grey,
-                  width: _fabAuto ? 2 : 1,
-                ),
-              ),
-              leading: const Icon(Icons.event_available),
-              title: Row(
-                children: [
-                  const Text('Data de fabricação'),
-                  if (_fabAuto) ...[
-                    const SizedBox(width: 8),
-                    _autoBadge(),
-                  ],
-                ],
-              ),
-              subtitle: Text(_formatDate(_manufacturingDate)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: () => _pickDate(isExpiration: false),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-                side: BorderSide(
-                  color: _expAuto ? Colors.green : Colors.grey,
-                  width: _expAuto ? 2 : 1,
-                ),
-              ),
-              leading: const Icon(Icons.event_busy),
-              title: Row(
-                children: [
-                  const Text('Data de validade'),
-                  if (_expAuto) ...[
-                    const SizedBox(width: 8),
-                    _autoBadge(),
-                  ],
-                ],
-              ),
-              subtitle: Text(_formatDate(_expirationDate)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: () => _pickDate(isExpiration: true),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                    : const Icon(Icons.check),
-                label: Text(_saving ? 'Salvando...' : 'Salvar produto'),
-              ),
-            ),
-          ],
         ),
       ),
     );

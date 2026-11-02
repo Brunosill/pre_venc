@@ -34,8 +34,8 @@ class ProfileScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 const Text(
                   'Seus produtos ficam salvos apenas neste celular. '
-                      'Crie uma conta para fazer backup e sincronizar '
-                      'entre dispositivos.',
+                  'Crie uma conta para fazer backup e sincronizar '
+                  'entre dispositivos.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
@@ -59,13 +59,14 @@ class ProfileScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Cabeçalho com avatar
           Center(
             child: Column(
               children: [
                 CircleAvatar(
                   radius: 48,
                   backgroundColor:
-                  Theme.of(context).colorScheme.primaryContainer,
+                      Theme.of(context).colorScheme.primaryContainer,
                   child: Icon(
                     Icons.person,
                     size: 56,
@@ -75,40 +76,46 @@ class ProfileScreen extends ConsumerWidget {
                 const SizedBox(height: 12),
                 Text(
                   user.email ?? 'Sem e-mail',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Conta criada em ${_formatDateString(user.createdAt)}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
+  	        	'Conta criada em ${_formatDateString(user.createdAt)}',
+  			style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      		),
               ],
             ),
           ),
           const SizedBox(height: 32),
+
+          // Info
           Card(
             child: Column(
               children: [
-                const ListTile(
-                  leading: Icon(Icons.cloud_done_outlined),
-                  title: Text('Sincronização'),
-                  subtitle: Text('Backup dos produtos na nuvem'),
-                  trailing: Switch(value: true, onChanged: null),
+                ListTile(
+                  leading: const Icon(Icons.cloud_done_outlined),
+                  title: const Text('Sincronização'),
+                  subtitle: const Text('Backup dos produtos na nuvem'),
+                  trailing: Switch(
+                    value: true,
+                    onChanged: null,
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.public),
                   title: const Text('Contribuição ao catálogo'),
-                  subtitle:
-                  const Text('Você ajuda a base de produtos crescer'),
+                  subtitle: const Text('Você ajuda a base de produtos crescer'),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                   onTap: () => _showContributionsInfo(context),
                 ),
               ],
             ),
           ),
+
           const SizedBox(height: 16),
+
+          // Sair
           Card(
             child: ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
@@ -123,7 +130,7 @@ class ProfileScreen extends ConsumerWidget {
                     title: const Text('Sair da conta?'),
                     content: const Text(
                       'Seus produtos continuam salvos no celular. '
-                          'Para acessá-los em outro dispositivo, entre novamente.',
+                      'Para acessá-los em outro dispositivo, entre novamente.',
                     ),
                     actions: [
                       TextButton(
@@ -132,8 +139,7 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Sair',
-                            style: TextStyle(color: Colors.red)),
+                        child: const Text('Sair', style: TextStyle(color: Colors.red)),
                       ),
                     ],
                   ),
@@ -145,6 +151,7 @@ class ProfileScreen extends ConsumerWidget {
               },
             ),
           ),
+
           const SizedBox(height: 24),
           Center(
             child: Text(
@@ -157,7 +164,6 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  /// `user.createdAt` no Supabase é String (ISO 8601), não DateTime.
   String _formatDateString(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '—';
     try {
@@ -176,10 +182,10 @@ class ProfileScreen extends ConsumerWidget {
         title: const Text('Contribuições ao catálogo'),
         content: const Text(
           'Quando você escaneia um produto desconhecido e confirma o nome, '
-              'ele é adicionado ao catálogo público. Isso ajuda todos os usuários '
-              'a cadastrarem produtos mais rápido.\n\n'
-              'Nenhum dado pessoal (validade, lote) é compartilhado — apenas '
-              'o nome, marca e código de barras do produto.',
+          'ele é adicionado ao catálogo público. Isso ajuda todos os usuários '
+          'a cadastrarem produtos mais rápido.\n\n'
+          'Nenhum dado pessoal (validade, lote) é compartilhado — apenas '
+          'o nome, marca e código de barras do produto.',
         ),
         actions: [
           TextButton(

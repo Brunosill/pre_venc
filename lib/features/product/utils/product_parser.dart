@@ -1,59 +1,63 @@
 import '../domain/entities/product.dart';
 
 class ProductParser {
-  // Data: DD/MM/YYYY, DD/MM/YY, MM/YYYY, MM/YY — com ou sem espaços, com ou sem dia
+  // ==================== BLACKLIST DE NOME ====================
+  static const _nameBlacklist = {
+    'PROIBIDA', 'VENDA', 'USO', 'ORAL', 'ADULTO', 'INFANTIL', 'ANOS', 'ACIMA',
+    'AMOSTRA', 'GRATIS', 'GRÁTIS', 'PRESCRIÇÃO', 'PRESCRICAO', 'SOB',
+    'GENÉRICO', 'GENERICO', 'COMPRIMIDO', 'COMPRIMIDOS', 'REVESTIDO',
+    'CONTÉM', 'CONTEM', 'MEDICAMENTO', 'FABRICADO', 'PRODUZIDO',
+    'LOTE', 'VALIDADE', 'FAB', 'VENC', 'EQUIVALENTE', 'FERRO', 'ELEMENTAR',
+  };
+
+  // ==================== PADRÃO DE DATA ====================
   static const _datePattern =
-      r'(\d{1,2})\s*[\/\-\.]\s*(\d{4}|\d{1,2})(?:\s*[\/\-\.]\s*(\d{2,4}))?';
+      r'(\d{1,2})\s*[\/\-\.\s]?\s*(\d{4}|\d{2})(?:\s*[\/\-\.\s]?\s*(\d{2,4}))?';
 
   // ==================== VALIDADE ====================
-  // 1) Palavras completas
-  static final _validadeFull = RegExp(
-    r'(?:VALIDADE|VENCIMENTO|VENC\.?|VÁLIDO\s+ATÉ|CONSUMIR\s+ATÉ|VAL\.?)\s*[:\s\.\-]*\s*' +
+  static final _validadeRegex = RegExp(
+    r'(?:VALIDADE|VENCIMENTO|VENC\.?|VÁLIDO\s+ATÉ|CONSUMIR\s+ATÉ|VAL\.?|V|V\.)\s*[:\s\.\-]*\s*' +
         _datePattern,
-    caseSensitive: false,
-  );
-  // 2) Abreviação "V" (precedida por início, espaço ou pontuação)
-  static final _validadeShortV = RegExp(
-    r'(?:^|[\s\(\[;,])(?:V|V\.)\s*[:\s\.]\s*' + _datePattern,
     caseSensitive: false,
   );
 
   // ==================== FABRICAÇÃO ====================
-  static final _fabricacaoFull = RegExp(
-    r'(?:FABRICA[ÇC][ÃA]O|FABRICADO\s+EM|PRODUZIDO\s+EM|FAB\.?|FABRIC\.?)\s*[:\s\.\-]*\s*' +
+  static final _fabricacaoRegex = RegExp(
+    r'(?:FABRICA[ÇC][ÃA]O|FABRICADO\s+EM|PRODUZIDO\s+EM|FAB\.?|F|F\.)\s*[:\s\.\-]*\s*' +
         _datePattern,
-    caseSensitive: false,
-  );
-  static final _fabricacaoShortF = RegExp(
-    r'(?:^|[\s\(\[;,])(?:F|F\.)\s*[:\s\.]\s*' + _datePattern,
     caseSensitive: false,
   );
 
   // ==================== LOTE ====================
-  // 1) "LOTE"/"LOT" com valor alfanumérico
-  static final _loteFull = RegExp(
-    r'(?:LOTE|LOT\.?)\s*[:\sNºnº\.\-]*\s*([A-Z0-9][A-Z0-9\.\/\-]{2,20})',
-    caseSensitive: false,
-  );
-  // 2) "L:" seguido de valor
-  static final _loteShortL = RegExp(
-    r'(?:^|[\s\(\[;,])(?:L|L\.)\s*[:\s\.]\s*([A-Z0-9][A-Z0-9\.\/\-]{2,20})',
-    caseSensitive: false,
-  );
-  // 3) Valor começando com L seguido de alfanuméricos (padrão BR: L2024A, L-2024)
-  static final _loteValueL = RegExp(
-    r'\b(L[A-Z0-9\.\/\-]{3,19})\b',
+  static final _loteRegex = RegExp(
+    r'(?:LOTE|LOT\.?|L(?!\d))\s*[:\sNºnº\.\-]*\s*([A-Z0-9][A-Z0-9\.\/\-]{2,20})|(L[0-9][A-Z0-9\.\/\-]{2,19})',
     caseSensitive: false,
   );
 
-  // ==================== CÓDIGO DE BARRAS ====================
   static final _barcodeRegex = RegExp(r'\b(\d{8,14})\b');
 
-  // Palavras comuns que começam com L mas NÃO são lote
-  static const _falseLoteWords = {
-    'LEITE', 'LIMAO', 'LIMÃO', 'LARANJA', 'LEITE.', 'LIGHT', 'LATA',
-    'LITRO', 'LITROS', 'LOTE', 'LOCAL', 'LINHA',
-  };
+  // ==================== SANITIZAÇÃO (APENAS PARA DATAS) ====================
+  /// Corrige as bagunças que o OCR faz apenas nas datas (letras F e V)
+  static String _sanitizeDates(String text) {
+    var result = text.toUpperCase();
+
+    // 1. Troca O/Q por 0 apenas se estiver logo após F ou V
+    result = result.replaceAll(RegExp(r'(?<=[FV])\s*[OQ]\s*'), '0');
+    // 2. Troca I/L por 1 e S por 5 apenas se estiver entre números
+    result = result.replaceAll(RegExp(r'(?<=\d)\s*[OQ]\s*(?=\d)'), '0');
+    result = result.replaceAll(RegExp(r'(?<=\d)\s*[IL]\s*(?=\d)'), '1');
+    result = result.replaceAll(RegExp(r'(?<=\d)\s*S\s*(?=\d)'), '5');
+
+    var prev = '';
+    while (result != prev) {
+      prev = result;
+      // Junta "F 05" -> "F05" (usando [ \t]+ para não pular linha)
+      result = result.replaceAllMapped(RegExp(r'([FV])[ \t]+(\d)'), (m) => '${m[1]}${m[2]}');
+      // Junta "0 5 2 6" -> "0526"
+      result = result.replaceAllMapped(RegExp(r'(\d)[ \t]+(\d)'), (m) => '${m[1]}${m[2]}');
+    }
+    return result;
+  }
 
   // ==================== HELPERS DE DATA ====================
   static DateTime? _parseDateFromMatch(RegExpMatch match) {
@@ -64,116 +68,96 @@ class ProductParser {
 
     final p3str = match.group(3);
 
-    // DD/MM/YYYY ou DD/MM/YY (três campos)
+    // 3 partes: DD/MM/YYYY
     if (p3str != null) {
       final p3 = int.tryParse(p3str);
       if (p3 == null) return null;
       final year = p3str.length == 2 ? 2000 + p3 : p3;
       if (p1 < 1 || p1 > 31 || p2 < 1 || p2 > 12) return null;
-      try {
-        final d = DateTime(year, p2, p1);
-        if (d.year != year || d.month != p2 || d.day != p1) return null;
-        return d;
-      } catch (_) {
-        return null;
-      }
+      return DateTime(year, p2, p1);
     }
 
-    // Dois campos: DD/MM ou MM/YY
+    // 2 partes, p2 tem 4 dígitos: MM/YYYY
+    // REGRA ANVISA: Vence no primeiro dia do mês
+    if (p2str.length == 4) {
+      if (p1 < 1 || p1 > 12) return null;
+      return DateTime(p2, p1, 1);
+    }
+
+    // 2 partes, p1 > 12: DD/MM
     if (p1 > 12) {
-      // DD/MM — usa ano atual ou próximo
-      if (p2 < 1 || p2 > 12 || p1 < 1 || p1 > 31) return null;
+      if (p1 < 1 || p1 > 31 || p2 < 1 || p2 > 12) return null;
       final now = DateTime.now();
       final year = p2 < now.month ? now.year + 1 : now.year;
-      try {
-        final d = DateTime(year, p2, p1);
-        if (d.year != year || d.month != p2 || d.day != p1) return null;
-        return d;
-      } catch (_) {
-        return null;
-      }
-    } else {
-      // MM/YY (último dia do mês)
-      if (p1 < 1 || p1 > 12) return null;
-      final year = p2str.length == 4 ? p2 : (p2 < 100 ? 2000 + p2 : p2);
-      try {
-        return DateTime(year, p1 + 1, 0); // dia 0 do próximo mês = último dia
-      } catch (_) {
-        return null;
-      }
+      return DateTime(year, p2, p1);
     }
+
+    // 2 partes, p1 <= 12: MM/YY
+    // REGRA ANVISA: Vence no primeiro dia do mês
+    if (p1 < 1 || p1 > 12) return null;
+    final year = p2 < 100 ? 2000 + p2 : p2;
+    return DateTime(year, p1, 1);
   }
 
   // ==================== PARSERS PÚBLICOS ====================
   static DateTime? parseValidade(String text) {
-    final m1 = _validadeFull.firstMatch(text);
-    if (m1 != null) {
-      final d = _parseDateFromMatch(m1);
-      if (d != null) return d;
-    }
-    final m2 = _validadeShortV.firstMatch(text);
-    if (m2 != null) return _parseDateFromMatch(m2);
-    return null;
+    final m = _validadeRegex.firstMatch(_sanitizeDates(text));
+    return m == null ? null : _parseDateFromMatch(m);
   }
 
   static DateTime? parseFabricacao(String text) {
-    final m1 = _fabricacaoFull.firstMatch(text);
-    if (m1 != null) {
-      final d = _parseDateFromMatch(m1);
-      if (d != null) return d;
-    }
-    final m2 = _fabricacaoShortF.firstMatch(text);
-    if (m2 != null) return _parseDateFromMatch(m2);
-    return null;
+    final m = _fabricacaoRegex.firstMatch(_sanitizeDates(text));
+    return m == null ? null : _parseDateFromMatch(m);
   }
 
   static String? parseLote(String text) {
-    // 1) LOTE/LOT
-    final m1 = _loteFull.firstMatch(text);
-    if (m1 != null) {
-      final raw = m1.group(1)?.trim().toUpperCase();
-      if (_isValidLote(raw)) return raw;
-    }
-    // 2) L: valor
-    final m2 = _loteShortL.firstMatch(text);
-    if (m2 != null) {
-      final raw = m2.group(1)?.trim().toUpperCase();
-      if (_isValidLote(raw)) return raw;
-    }
-    // 3) Valor standalone começando com L + dígitos
-    final m3 = _loteValueL.firstMatch(text);
-    if (m3 != null) {
-      final raw = m3.group(1)?.trim().toUpperCase();
-      if (_isValidLote(raw)) return raw;
+    // O lote NÃO usa sanitização, ele lê o texto original puro
+    final matches = _loteRegex.allMatches(text);
+    for (final m in matches) {
+      final raw = (m.group(1) ?? m.group(2))?.trim().toUpperCase();
+      if (raw == null || raw.length < 4) continue;
+      if (!RegExp(r'\d').hasMatch(raw)) continue;
+      return raw;
     }
     return null;
-  }
-
-  static bool _isValidLote(String? raw) {
-    if (raw == null) return false;
-    if (raw.length < 4 || raw.length > 20) return false;
-    if (_falseLoteWords.contains(raw)) return false;
-    // Precisa conter pelo menos um dígito (evita falsos positivos como "LEITE")
-    if (!RegExp(r'\d').hasMatch(raw)) return false;
-    return true;
   }
 
   static String? parseBarcode(String text) {
-    final match = _barcodeRegex.firstMatch(text);
-    return match?.group(1);
+    final m = _barcodeRegex.firstMatch(text);
+    return m?.group(1);
   }
 
   static String? parseName(String text) {
-    final lines = text.split('\n');
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.length < 3) continue;
-      final letters = trimmed.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ]'), '');
-      if (letters.length >= 3 && letters.length != trimmed.length) {
-        return trimmed.length > 60 ? trimmed.substring(0, 60) : trimmed;
-      }
+    final candidates = text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.length >= 4 && l.length <= 40)
+        .where((l) => !RegExp(r'^\d').hasMatch(l))
+        .where((l) => l.split(' ').length <= 4)
+        .where((l) {
+      final upper = l.toUpperCase();
+      return !_nameBlacklist.any((w) => upper.contains(w));
+    })
+        .where((l) {
+      final letters = l.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ]'), '');
+      return letters.length >= 3;
+    })
+        .toList();
+
+    if (candidates.isEmpty) return null;
+
+    int score(String s) {
+      int base = s.length;
+      final titleCase = RegExp(r'^[A-ZÀ-Ý][a-zà-ÿ]').hasMatch(s);
+      final hasMidCaps = RegExp(r'[a-zà-ÿ][A-ZÀ-Ý]').hasMatch(s);
+      if (titleCase && !hasMidCaps) base += 50;
+      if (s.isNotEmpty && s[0].toUpperCase() == s[0]) base += 10;
+      return base;
     }
-    return null;
+
+    candidates.sort((a, b) => score(b).compareTo(score(a)));
+    final best = candidates.first;
+    return best.length > 60 ? best.substring(0, 60) : best;
   }
 
   static ProductSuggestion parse(String ocrText) {
@@ -187,11 +171,7 @@ class ProductParser {
     );
   }
 
-  /// Mescla duas sugestões, priorizando valores não-nulos da primeira.
-  static ProductSuggestion merge(
-    ProductSuggestion? base,
-    ProductSuggestion next,
-  ) {
+  static ProductSuggestion merge(ProductSuggestion? base, ProductSuggestion next) {
     if (base == null) return next;
     return ProductSuggestion(
       name: base.name ?? next.name,
@@ -222,11 +202,7 @@ class ProductSuggestion {
   });
 
   bool get hasAnyField =>
-      name != null ||
-      barcode != null ||
-      lote != null ||
-      manufacturingDate != null ||
-      expirationDate != null;
+      name != null || barcode != null || lote != null || manufacturingDate != null || expirationDate != null;
 
   int get filledFields {
     var count = 0;

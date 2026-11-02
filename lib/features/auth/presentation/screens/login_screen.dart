@@ -35,7 +35,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    // Captura antes do await para evitar use_build_context_synchronously
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
@@ -168,11 +167,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const SizedBox(height: 12),
             TextButton(
               onPressed: () async {
-                final ok = await Navigator.push<bool>(
-                  context,
+                final navigator = Navigator.of(context);
+                final ok = await navigator.push<bool>(
                   MaterialPageRoute(builder: (_) => const SignupScreen()),
                 );
-                if (ok == true && mounted) Navigator.pop(context, true);
+                if (ok == true && mounted) navigator.pop(true);
               },
               child: const Text('Não tem conta? Criar agora'),
             ),

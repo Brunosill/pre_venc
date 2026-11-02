@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pre_venc/features/alerts/data/models/alert_settings_model.dart';
 import 'package:pre_venc/features/alerts/data/services/alert_scheduler.dart';
-import 'package:pre_venc/features/product/domain/entities/product.dart';
+import 'package:pre_venc/features/product/data/models/inventory_item.dart';
 
 import '../helpers/fake_notification_scheduler.dart';
 
@@ -14,16 +14,20 @@ void main() {
     scheduler = AlertScheduler(notifications: fakeNotifications);
   });
 
-  Product buildProduct({
+  InventoryItem buildItem({
     required String id,
     required String name,
     DateTime? expiration,
+    DateTime? deletedAt,
   }) {
-    return Product(
+    final now = DateTime.now();
+    return InventoryItem(
       id: id,
       name: name,
       expirationDate: expiration,
-      createdAt: DateTime.now(),
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: deletedAt,
     );
   }
 
@@ -37,7 +41,7 @@ void main() {
 
   test('não agenda nada se desabilitado', () async {
     await scheduler.rescheduleAll(
-      [buildProduct(id: 'p1', name: 'Leite', expiration: DateTime(2026, 12, 31))],
+      [buildItem(id: 'p1', name: 'Leite', expiration: DateTime(2026, 12, 1))],
       AlertSettingsModel(daysBefore: [30, 1], enabled: false),
     );
     expect(fakeNotifications.scheduled, isEmpty);
@@ -46,15 +50,31 @@ void main() {
   test('agenda notificações para cada daysBefore', () async {
     final future = DateTime.now().add(const Duration(days: 60));
     await scheduler.rescheduleAll(
-      [buildProduct(id: 'p1', name: 'Leite', expiration: future)],
+      [buildItem(id: 'p1', name: 'Leite', expiration: future)],
       AlertSettingsModel(daysBefore: [30, 1], enabled: true),
     );
     expect(fakeNotifications.scheduled, hasLength(2));
   });
 
-  test('ignora produtos sem validade', () async {
+  test('ignora itens sem validade', () async {
     await scheduler.rescheduleAll(
-      [buildProduct(id: 'p1', name: 'Sem validade')],
+      [buildItem(id: 'p1', name: 'Sem validade')],
+      AlertSettingsModel(daysBefore: [30], enabled: true),
+    );
+    expect(fakeNotifications.scheduled, isEmpty);
+  });
+
+  test('ignora itens com soft delete', () async {
+    final future = DateTime.now().add(const Duration(days: 30));
+    await scheduler.rescheduleAll(
+      [
+        buildItem(
+          id: 'p1',
+          name: 'Deletado',
+          expiration: future,
+          deletedAt: DateTime.now(),
+        ),
+      ],
       AlertSettingsModel(daysBefore: [30], enabled: true),
     );
     expect(fakeNotifications.scheduled, isEmpty);
@@ -63,16 +83,16 @@ void main() {
   test('ignora notificações no passado', () async {
     final past = DateTime.now().subtract(const Duration(days: 10));
     await scheduler.rescheduleAll(
-      [buildProduct(id: 'p1', name: 'Vencido', expiration: past)],
+      [buildItem(id: 'p1', name: 'Vencido', expiration: past)],
       AlertSettingsModel(daysBefore: [30], enabled: true),
     );
     expect(fakeNotifications.scheduled, isEmpty);
   });
 
-  test('título e corpo contêm dados do produto', () async {
+  test('título e corpo contêm dados do item', () async {
     final future = DateTime.now().add(const Duration(days: 10));
     await scheduler.rescheduleAll(
-      [buildProduct(id: 'p1', name: 'Iogurte', expiration: future)],
+      [buildItem(id: 'p1', name: 'Iogurte', expiration: future)],
       AlertSettingsModel(daysBefore: [5], enabled: true),
     );
     expect(fakeNotifications.scheduled, hasLength(1));
@@ -87,7 +107,7 @@ void main() {
     expect(id1, id2);
   });
 
-  test('notificationId difere por produto ou por diasBefore', () {
+  test('notificationId difere por item ou por daysBefore', () {
     final a = AlertScheduler.notificationId('produto1', 30);
     final b = AlertScheduler.notificationId('produto1', 1);
     final c = AlertScheduler.notificationId('produto2', 30);

@@ -2,8 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
 import '../../../../core/utils/hive_boxes.dart';
-import '../../../product/domain/entities/product.dart';
-import '../../../product/presentation/providers/product_providers.dart';
+import '../../../product/data/models/inventory_item.dart';
+import '../../../product/presentation/providers/inventory_providers.dart';
 import '../../data/models/alert_settings_model.dart';
 import '../../data/services/alert_scheduler.dart';
 import '../../data/services/flutter_notification_scheduler.dart';
@@ -13,7 +13,7 @@ import '../../domain/entities/alert_settings.dart';
 final alertSettingsBoxProvider =
     Provider<Box<AlertSettingsModel>>((ref) => HiveBoxes.alertSettingsBox);
 
-// Scheduler (injeta a implementação real)
+// Scheduler (injeção direta)
 final alertSchedulerProvider = Provider<AlertScheduler>((ref) {
   return AlertScheduler(notifications: FlutterNotificationScheduler());
 });
@@ -52,11 +52,11 @@ final saveAlertSettingsProvider =
       ),
     );
 
-    final products =
-        ref.read(productsStreamProvider).asData?.value ?? const <Product>[];
+    final items =
+        ref.read(inventoryItemsStreamProvider).asData?.value ?? const <InventoryItem>[];
     final model = box.get('settings');
     if (model != null) {
-      await scheduler.rescheduleAll(products, model);
+      await scheduler.rescheduleAll(items, model);
     }
   };
 });
@@ -67,22 +67,26 @@ final rescheduleAlertsProvider = Provider<Future<void> Function()>((ref) {
   final box = ref.watch(alertSettingsBoxProvider);
 
   return () async {
-    final products =
-        ref.read(productsStreamProvider).asData?.value ?? const <Product>[];
+    final items =
+        ref.read(inventoryItemsStreamProvider).asData?.value ?? const <InventoryItem>[];
     final model = box.get('settings') ??
         AlertSettingsModel(daysBefore: const [30, 1], enabled: true);
-    await scheduler.rescheduleAll(products, model);
+    await scheduler.rescheduleAll(items, model);
   };
 });
 
 // Produtos que vencem em até 7 dias
-final expiringThisWeekProvider = Provider<List<Product>>((ref) {
-  final products =
-      ref.watch(productsStreamProvider).asData?.value ?? const <Product>[];
-  return products
-      .where((p) =>
-          p.daysToExpire != null &&
-          p.daysToExpire! >= 0 &&
-          p.daysToExpire! <= 7)
-      .toList();
+final expiringThisWeekProvider = Provider<List<InventoryItem>>((ref) {
+  final items =
+      ref.watch(inventoryItemsStreamProvider).asData?.value ?? const <InventoryItem>[];
+  
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+
+  return items.where((item) {
+    if (item.expirationDate == null) return false;
+    final exp = item.expirationDate!;
+    final days = DateTime(exp.year, exp.month, exp.day).difference(today).inDays;
+    return days >= 0 && days <= 7;
+  }).toList();
 });

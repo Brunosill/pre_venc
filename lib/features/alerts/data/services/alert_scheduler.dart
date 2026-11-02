@@ -1,4 +1,4 @@
-import '../../../product/domain/entities/product.dart';
+import '../../../product/data/models/inventory_item.dart';
 import '../models/alert_settings_model.dart';
 import 'notification_scheduler.dart';
 
@@ -9,12 +9,11 @@ class AlertScheduler {
       : _notifications = notifications ?? _defaultScheduler();
 
   static NotificationScheduler _defaultScheduler() {
-    // Import tardio para evitar dependência circular em testes
     return _LazyDefaultScheduler();
   }
 
   Future<void> rescheduleAll(
-    List<Product> products,
+    List<InventoryItem> items,
     AlertSettingsModel settings,
   ) async {
     await _notifications.cancelAll();
@@ -23,8 +22,10 @@ class AlertScheduler {
 
     final now = DateTime.now();
 
-    for (final product in products) {
-      final expiration = product.expirationDate;
+    for (final item in items) {
+      // Ignora itens deletados ou sem validade
+      if (item.deletedAt != null) continue;
+      final expiration = item.expirationDate;
       if (expiration == null) continue;
 
       for (final daysBefore in settings.daysBefore) {
@@ -38,7 +39,7 @@ class AlertScheduler {
 
         if (scheduledDate.isBefore(now)) continue;
 
-        final id = notificationId(product.id, daysBefore);
+        final id = notificationId(item.id, daysBefore);
         final whenLabel = daysBefore == 0
             ? 'hoje'
             : daysBefore == 1
@@ -48,30 +49,27 @@ class AlertScheduler {
         await _notifications.scheduleAt(
           id: id,
           title: '⏰ Produto vencendo $whenLabel',
-          body: '"${product.name}" vence em '
+          body: '"${item.name}" vence em '
               '${expiration.day.toString().padLeft(2, '0')}/'
               '${expiration.month.toString().padLeft(2, '0')}/'
               '${expiration.year}.',
           scheduledDate: scheduledDate,
-          payload: product.id,
+          payload: item.id,
         );
       }
     }
   }
 
-  /// IDs são determinísticos: mesmo produto + dias = mesmo ID.
-  static int notificationId(String productId, int daysBefore) {
-    final hash = productId.hashCode.abs() % 100000;
+  static int notificationId(String itemId, int daysBefore) {
+    final hash = itemId.hashCode.abs() % 100000;
     return hash * 100 + daysBefore.clamp(0, 99);
   }
 }
 
-/// Implementação default que só é carregada quando necessário.
 class _LazyDefaultScheduler implements NotificationScheduler {
   late final _inner = _createInner();
 
   static NotificationScheduler _createInner() {
-    // Import local para evitar dependência circular nos testes.
     return _realSchedulerFactory();
   }
 
@@ -98,10 +96,7 @@ class _LazyDefaultScheduler implements NotificationScheduler {
   Future<void> cancelAll() => _inner.cancelAll();
 }
 
-// Função que será "injetada" no topo do arquivo via import.
-// Declarada aqui para permitir sobrescrever em testes, se necessário.
 NotificationScheduler _realSchedulerFactory() {
-  // ignore: implementation_imports
   return _LazyFlutterScheduler();
 }
 
@@ -114,8 +109,6 @@ class _LazyFlutterScheduler implements NotificationScheduler {
     required DateTime scheduledDate,
     String? payload,
   }) async {
-    // Import tardio para evitar carregar o plugin nos testes.
-    // ignore: avoid_dynamic_calls
     final service = _loadFlutterScheduler();
     return service.scheduleAt(
       id: id,
@@ -133,24 +126,18 @@ class _LazyFlutterScheduler implements NotificationScheduler {
   Future<void> cancelAll() => _loadFlutterScheduler().cancelAll();
 
   NotificationScheduler _loadFlutterScheduler() {
-    // Carrega o FlutterNotificationScheduler em runtime.
-    // Em testes puros, nunca é chamado (passamos um mock no construtor).
     return _cachedScheduler ??= _createFlutterScheduler();
   }
 
   NotificationScheduler? _cachedScheduler;
 }
 
-/// Este símbolo é sobrescrito em testes para evitar o plugin.
 NotificationScheduler _createFlutterScheduler() {
-  // Import tardio — carregado só se realmente usado.
-  // ignore: prefer_const_constructors
   return _FlutterSchedulerLoader.load();
 }
 
 class _FlutterSchedulerLoader {
   static NotificationScheduler load() {
-    // Este método é substituído em ambiente de teste.
     throw UnimplementedError(
       'Em testes, injete um NotificationScheduler mock via construtor.',
     );

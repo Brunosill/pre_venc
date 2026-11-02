@@ -6,18 +6,16 @@ class MedicamentosApiService {
   static const _base = 'https://medicamentos.api.br/api/v1';
   static const _timeout = Duration(seconds: 8);
 
-  final String? _apiKey;
+  final String? apiKey;
   final http.Client _client;
 
-  // ignore: prefer_initializing_formals
-  MedicamentosApiService({String? apiKey, http.Client? client})
-      : _apiKey = apiKey,
-        _client = client ?? http.Client();
+  MedicamentosApiService({this.apiKey, http.Client? client})
+      : _client = client ?? http.Client();
 
-  bool get isConfigured => _apiKey != null && _apiKey.isNotEmpty;
+  bool get isConfigured => apiKey != null && apiKey!.isNotEmpty;
 
   Future<Map<String, dynamic>?> lookup(String barcode) async {
-    final key = _apiKey;
+    final key = apiKey;
     if (key == null || key.isEmpty) return null;
 
     try {
