@@ -6,6 +6,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../../ocr/presentation/screens/multi_capture_screen.dart';
 import '../../data/models/inventory_item.dart';
+import '../../domain/entities/product.dart';       // ← ProductSource (enum)
+import '../../utils/product_parser.dart';
 import '../providers/barcode_providers.dart';
 import '../providers/inventory_providers.dart';
 import 'barcode_scanner_screen.dart';
@@ -96,6 +98,90 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       // silencioso, usuário digita manualmente
     } finally {
       if (mounted) setState(() => _loadingInitial = false);
+    }
+  }
+
+  Future<void> _reportProblem() async {
+    if (widget.existingItem == null) return;
+
+    // Captura context-bound objects ANTES de qualquer await
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final feedbackService = ref.read(feedbackServiceProvider);
+
+    if (feedbackService == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Feedback indisponível: Supabase não configurado.'),
+        ),
+      );
+      return;
+    }
+
+    // 1. Pergunta o que estava errado (primeiro await)
+    final whatWasWrong = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => const _ReportProblemDialog(),
+    );
+    if (whatWasWrong == null || whatWasWrong.isEmpty) return;
+    if (!mounted) return;
+
+    // 2. Mostra loading (sem await — só dispara e segue)
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final originalSuggestion = ProductSuggestion(
+        name: widget.existingItem!.name,
+        barcode: widget.existingItem!.barcode,
+        lote: widget.existingItem!.lote,
+        manufacturingDate: widget.existingItem!.manufacturingDate,
+        expirationDate: widget.existingItem!.expirationDate,
+        source: ProductSource.ocr,
+      );
+
+      // Usa os valores ATUAIS do form (que o usuário pode ter corrigido)
+      final corrected = InventoryItem(
+        id: widget.existingItem!.id,
+        userId: widget.existingItem!.userId,
+        barcode: _barcodeCtrl.text.trim().isEmpty
+            ? null
+            : _barcodeCtrl.text.trim(),
+        type: _type,
+        name: _nameCtrl.text.trim(),
+        lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
+        manufacturingDate: _manufacturingDate,
+        expirationDate: _expirationDate,
+        quantity: widget.existingItem!.quantity,
+        unit: widget.existingItem!.unit,
+        notes: widget.existingItem!.notes,
+        source: widget.existingItem!.source,
+        createdAt: widget.existingItem!.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      await feedbackService.submit(
+        correctedItem: corrected,
+        originalSuggestion: originalSuggestion,
+        whatWasWrong: whatWasWrong,
+      );
+
+      if (!mounted) return;
+      navigator.pop(); // fecha loading
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Obrigado! Vamos analisar e melhorar o app.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      navigator.pop(); // fecha loading
+      messenger.showSnackBar(
+        SnackBar(content: Text('Erro ao enviar feedback: $e')),
+      );
     }
   }
 
@@ -239,6 +325,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       appBar: AppBar(
         title: Text(widget.existingItem == null ? 'Novo Produto' : 'Editar Produto'),
         actions: [
+
+          if (widget.existingItem != null)
+            IconButton(
+              icon: const Icon(Icons.report_problem_outlined),
+              tooltip: 'Reportar problema',
+              onPressed: _reportProblem,
+            ),
+
           IconButton(
             icon: const Icon(Icons.camera_alt),
             tooltip: 'Extrair do OCR',
@@ -468,6 +562,81 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ReportProblemDialog extends StatefulWidget {
+  const _ReportProblemDialog();
+
+  @override
+  State<_ReportProblemDialog> createState() => _ReportProblemDialogState();
+}
+
+class _ReportProblemDialogState extends State<_ReportProblemDialog> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.report_problem, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Reportar problema'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'O que estava errado nos dados extraídos?',
+            style: TextStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          _buildCheckbox('Nome', 'name'),
+          _buildCheckbox('Lote', 'lote'),
+          _buildCheckbox('Datas', 'date'),
+          const SizedBox(height: 12),
+          const Text(
+            'Vamos enviar o texto OCR e as fotos anonimizadas '
+                '(sem GPS ou dados pessoais) para melhorar o app.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.pop(context, _selected.toList()),
+          child: const Text('Enviar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCheckbox(String label, String value) {
+    return CheckboxListTile(
+      title: Text(label),
+      value: _selected.contains(value),
+      onChanged: (checked) {
+        setState(() {
+          if (checked == true) {
+            _selected.add(value);
+          } else {
+            _selected.remove(value);
+          }
+        });
+      },
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      controlAffinity: ListTileControlAffinity.leading,
     );
   }
 }

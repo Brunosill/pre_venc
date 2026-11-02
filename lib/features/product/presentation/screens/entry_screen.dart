@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'barcode_scanner_screen.dart';
 import 'product_form_screen.dart';
+import 'batch_scanner_screen.dart';
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
@@ -98,6 +99,21 @@ class _EntryScreenState extends State<EntryScreen> {
                   'Escanear com a câmera',
                   style: TextStyle(fontSize: 16),
                 ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BatchScannerScreen()),
+                  );
+                },
+                icon: const Icon(Icons.shopping_cart),
+                label: const Text('Modo Mercado (Vários Produtos)'),
               ),
             ),
           ],

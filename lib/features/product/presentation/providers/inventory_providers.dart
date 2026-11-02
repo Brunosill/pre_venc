@@ -40,14 +40,19 @@ final inventoryItemsStreamProvider =
 // Ações de CRUD
 final addItemProvider = Provider<Future<void> Function(InventoryItem)>((ref) {
   final repo = ref.watch(inventoryRepositoryProvider);
-  return (item) => repo.addItem(item);
+  return (item) async {
+    item.syncStatus = 0; // pendente de sync
+    await repo.addItem(item);
+  };
 });
 
 final updateItemProvider = Provider<Future<void> Function(InventoryItem)>((ref) {
   final repo = ref.watch(inventoryRepositoryProvider);
-  return (item) => repo.updateItem(item);
+  return (item) async {
+    item.syncStatus = 0; // pendente de sync
+    await repo.updateItem(item);
+  };
 });
-
 final deleteItemProvider = Provider<Future<void> Function(String)>((ref) {
   final repo = ref.watch(inventoryRepositoryProvider);
   return (id) => repo.deleteItem(id);

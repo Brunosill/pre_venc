@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../sync/presentation/providers/sync_providers.dart';
 import '../../../backup/presentation/screens/backup_screen.dart';
 import '../providers/auth_providers.dart';
 import 'login_screen.dart';
@@ -87,44 +88,74 @@ class ProfileScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 32),
-
-          // Info
+          const SizedBox(height: 16),
           Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.backup),
-                  title: const Text('Backup e Restauração'),
-                  subtitle: const Text('Exportar ou importar seus dados'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BackupScreen()),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.cloud_done_outlined),
-                  title: const Text('Sincronização'),
-                  subtitle: const Text('Backup dos produtos na nuvem'),
-                  trailing: Switch(
-                    value: true,
-                    onChanged: null,
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.public),
-                  title: const Text('Contribuição ao catálogo'),
-                  subtitle: const Text('Você ajuda a base de produtos crescer'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                  onTap: () => _showContributionsInfo(context),
-                ),
-              ],
+            child: Consumer(
+              builder: (context, ref, _) {
+                final syncState = ref.watch(syncStateProvider);
+                final lastSync = ref.read(syncStateProvider.notifier).lastSync;
+
+                // Formata a data amigável
+                String lastSyncLabel = 'Nunca sincronizado';
+                if (lastSync != null && lastSync.year > 2000) {
+                  lastSyncLabel = 'Última: ${_formatDateString(lastSync.toIso8601String())}';
+                }
+
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: syncState.isLoading
+                          ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                          : const Icon(Icons.sync, color: Colors.blue),
+                      title: const Text('Sincronizar agora'),
+                      subtitle: Text(lastSyncLabel),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                      onTap: syncState.isLoading
+                          ? null
+                          : () async {
+                        await ref.read(syncStateProvider.notifier).sync();
+                        if (!context.mounted) return;
+                        final result = ref.read(syncStateProvider).asData?.value;
+                        if (result != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '↑ ${result.pushed} enviados | ↓ ${result.pulled} recebidos'
+                                    '${result.hasErrors ? " | ⚠ ${result.errors} erro(s)" : " | ✓"}',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.backup),
+                      title: const Text('Backup e Restauração'),
+                      subtitle: const Text('Exportar ou importar seus dados'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const BackupScreen()),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.public),
+                      title: const Text('Contribuição ao catálogo'),
+                      subtitle: const Text('Você ajuda a base de produtos crescer'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                      onTap: () => _showContributionsInfo(context),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
-
           const SizedBox(height: 16),
 
           // Sair
@@ -171,7 +202,52 @@ class ProfileScreen extends ConsumerWidget {
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
           ),
+
+          const SizedBox(height: 16),
+          Card(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final syncState = ref.watch(syncStateProvider);
+                final lastSync = ref.read(syncStateProvider.notifier).lastSync;
+
+                return ListTile(
+                  leading: syncState.isLoading
+                      ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                      : const Icon(Icons.sync, color: Colors.blue),
+                  title: const Text('Sincronizar agora'),
+                  subtitle: Text(
+                    lastSync != null
+                        ? 'Última: ${_formatDateString(lastSync.toIso8601String())}'
+                        : 'Nunca sincronizado',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: syncState.isLoading
+                      ? null
+                      : () async {
+                    await ref.read(syncStateProvider.notifier).sync();
+                    if (!context.mounted) return;
+                    final result = ref.read(syncStateProvider).asData?.value;
+                    if (result != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '↑ ${result.pushed}  ↓ ${result.pulled}  '
+                                '${result.hasErrors ? "⚠ ${result.errors} erro(s)" : "✓"}',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                );
+              },
+            ),
+          ),
         ],
+
       ),
     );
   }

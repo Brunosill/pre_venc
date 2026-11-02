@@ -11,6 +11,7 @@ import '../../data/services/medicamentos_api_service.dart';
 import '../../data/services/open_beauty_facts_service.dart';
 import '../../data/services/open_food_facts_service.dart';
 import '../../data/services/remote_catalog_service.dart';
+import '../../../feedback/data/services/feedback_service.dart';
 
 final barcodeCacheBoxProvider =
     Provider<Box<BarcodeCacheModel>>((ref) => HiveBoxes.barcodeCacheBox);
@@ -48,4 +49,11 @@ final catalogContributionServiceProvider =
   final client = ref.watch(supabaseClientProvider);
   if (client == null) return null;
   return CatalogContributionService(client);
+});
+
+
+final feedbackServiceProvider = Provider<FeedbackService?>((ref) {
+  final client = ref.watch(supabaseClientProvider);
+  if (client == null) return null;
+  return FeedbackService(client);
 });
