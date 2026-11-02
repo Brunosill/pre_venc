@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../backup/presentation/screens/backup_screen.dart';
 import '../providers/auth_providers.dart';
 import 'login_screen.dart';
 
@@ -92,6 +93,17 @@ class ProfileScreen extends ConsumerWidget {
           Card(
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.backup),
+                  title: const Text('Backup e Restauração'),
+                  subtitle: const Text('Exportar ou importar seus dados'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BackupScreen()),
+                  ),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.cloud_done_outlined),
                   title: const Text('Sincronização'),

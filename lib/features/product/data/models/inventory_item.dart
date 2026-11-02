@@ -2,55 +2,22 @@ import 'package:hive/hive.dart';
 
 @HiveType(typeId: 51)
 class InventoryItem extends HiveObject {
-  @HiveField(0)
-  final String id;
-
-  @HiveField(1)
-  final String? userId; // Nulo se anônimo
-
-  @HiveField(2)
-  final String? barcode;
-
-  @HiveField(3)
-  final int type; // 0=Alimento, 1=Medicamento, 2=Beleza
-
-  @HiveField(4)
-  String name;
-
-  @HiveField(5)
-  String? lote;
-
-  @HiveField(6)
-  DateTime? manufacturingDate;
-
-  @HiveField(7)
-  DateTime? expirationDate;
-
-  @HiveField(8)
-  double quantity;
-
-  @HiveField(9)
-  String? unit; // 'un', 'kg', 'L', 'mg', 'ml'
-
-  @HiveField(10)
-  String? notes;
-
-  @HiveField(11)
-  final int source; // 0=OCR, 1=Barcode, 2=Manual
-
-  @HiveField(12)
-  final DateTime createdAt;
-
-  @HiveField(13)
-  DateTime updatedAt;
-
-  @HiveField(14)
-  DateTime? deletedAt;
-
-  // MELHORIA DE UX: Modo Mercado (Batch Scan)
-  // Se true, o item foi escaneado no mercado e está aguardando ser completado.
-  @HiveField(15)
-  bool isDraft;
+  @HiveField(0) final String id;
+  @HiveField(1) final String? userId;
+  @HiveField(2) final String? barcode;
+  @HiveField(3) final int type;
+  @HiveField(4) String name;
+  @HiveField(5) String? lote;
+  @HiveField(6) DateTime? manufacturingDate;
+  @HiveField(7) DateTime? expirationDate;
+  @HiveField(8) double quantity;
+  @HiveField(9) String? unit;
+  @HiveField(10) String? notes;
+  @HiveField(11) final int source;
+  @HiveField(12) final DateTime createdAt;
+  @HiveField(13) DateTime updatedAt;
+  @HiveField(14) DateTime? deletedAt;
+  @HiveField(15) bool isDraft;
 
   InventoryItem({
     required this.id,
@@ -70,6 +37,50 @@ class InventoryItem extends HiveObject {
     this.deletedAt,
     this.isDraft = false,
   });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'userId': userId,
+    'barcode': barcode,
+    'type': type,
+    'name': name,
+    'lote': lote,
+    'manufacturingDate': manufacturingDate?.toIso8601String(),
+    'expirationDate': expirationDate?.toIso8601String(),
+    'quantity': quantity,
+    'unit': unit,
+    'notes': notes,
+    'source': source,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'deletedAt': deletedAt?.toIso8601String(),
+    'isDraft': isDraft,
+  };
+
+  factory InventoryItem.fromJson(Map<String, dynamic> json) => InventoryItem(
+    id: json['id'] as String,
+    userId: json['userId'] as String?,
+    barcode: json['barcode'] as String?,
+    type: json['type'] as int? ?? 0,
+    name: json['name'] as String,
+    lote: json['lote'] as String?,
+    manufacturingDate: json['manufacturingDate'] != null
+        ? DateTime.parse(json['manufacturingDate'])
+        : null,
+    expirationDate: json['expirationDate'] != null
+        ? DateTime.parse(json['expirationDate'])
+        : null,
+    quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
+    unit: json['unit'] as String? ?? 'un',
+    notes: json['notes'] as String?,
+    source: json['source'] as int? ?? 2,
+    createdAt: DateTime.parse(json['createdAt']),
+    updatedAt: DateTime.parse(json['updatedAt']),
+    deletedAt: json['deletedAt'] != null
+        ? DateTime.parse(json['deletedAt'])
+        : null,
+    isDraft: json['isDraft'] as bool? ?? false,
+  );
 }
 
 class InventoryItemAdapter extends TypeAdapter<InventoryItem> {

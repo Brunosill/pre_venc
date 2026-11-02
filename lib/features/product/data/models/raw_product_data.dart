@@ -24,7 +24,7 @@ class RawProductData extends HiveObject {
   final DateTime createdAt;
 
   @HiveField(7)
-  final int ocrStatus; // 0=Pendente, 1=Sucesso, 2=Falha
+  final int ocrStatus;
 
   RawProductData({
     required this.id,
@@ -36,6 +36,34 @@ class RawProductData extends HiveObject {
     required this.createdAt,
     this.ocrStatus = 0,
   });
+
+  // ==================== JSON ====================
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'barcode': barcode,
+    'imagePath1': imagePath1?.split('/').last,
+    'imagePath2': imagePath2?.split('/').last,
+    'ocrText1': ocrText1,
+    'ocrText2': ocrText2,
+    'createdAt': createdAt.toIso8601String(),
+    'ocrStatus': ocrStatus,
+  };
+
+  factory RawProductData.fromJson(Map<String, dynamic> json, String imageDir) =>
+      RawProductData(
+        id: json['id'] as String,
+        barcode: json['barcode'] as String?,
+        imagePath1: json['imagePath1'] != null
+            ? '$imageDir/${json['imagePath1']}'
+            : null,
+        imagePath2: json['imagePath2'] != null
+            ? '$imageDir/${json['imagePath2']}'
+            : null,
+        ocrText1: json['ocrText1'] as String?,
+        ocrText2: json['ocrText2'] as String?,
+        createdAt: DateTime.parse(json['createdAt']),
+        ocrStatus: json['ocrStatus'] as int? ?? 0,
+      );
 }
 
 class RawProductDataAdapter extends TypeAdapter<RawProductData> {

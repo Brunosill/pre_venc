@@ -63,6 +63,8 @@ dependencies:
   timezone: ^0.9.4
     # Supabase
   supabase_flutter: ^2.8.0
+  archive: ^3.6.1
+  file_picker: ^13.3.0
 
 dev_dependencies:
   flutter_test:

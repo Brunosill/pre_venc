@@ -7,6 +7,7 @@ import 'app.dart';
 import 'core/utils/hive_boxes.dart';
 import 'features/alerts/data/models/alert_settings_model.dart';
 import 'features/alerts/data/services/notification_service.dart';
+
 import 'features/product/data/models/barcode_cache_model.dart';
 import 'features/product/data/models/inventory_item.dart';
 import 'features/product/data/models/raw_product_data.dart';
