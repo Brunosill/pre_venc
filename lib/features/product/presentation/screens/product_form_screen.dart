@@ -152,7 +152,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             : _barcodeCtrl.text.trim(),
         type: _type,
         name: _nameCtrl.text.trim(),
-        lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
+        lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim().toUpperCase(),
+
         manufacturingDate: _manufacturingDate,
         expirationDate: _expirationDate,
         quantity: widget.existingItem!.quantity,
@@ -259,6 +260,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
     try {
       final qty = double.tryParse(_quantityCtrl.text) ?? 1.0;
@@ -267,10 +270,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       final item = InventoryItem(
         id: widget.existingItem?.id ?? const Uuid().v4(),
         userId: widget.existingItem?.userId,
-        barcode: _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
+        barcode: _barcodeCtrl.text.trim().isEmpty
+            ? null
+            : _barcodeCtrl.text.trim(),
         type: _type,
         name: _nameCtrl.text.trim(),
-        lote: _loteCtrl.text.trim().isEmpty ? null : _loteCtrl.text.trim(),
+        lote: _loteCtrl.text.trim().isEmpty
+            ? null
+            : _loteCtrl.text.trim().toUpperCase(), // ← normalizado
         manufacturingDate: _manufacturingDate,
         expirationDate: _expirationDate,
         quantity: qty,
@@ -283,20 +290,40 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         isDraft: false,
       );
 
+      late final InventoryItem result;
       if (widget.existingItem != null) {
-        await ref.read(updateItemProvider)(item);
+        result = await ref.read(updateItemProvider)(item);
       } else {
-        await ref.read(addItemProvider)(item);
+        result = await ref.read(addItemProvider)(item);
       }
 
       if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.existingItem != null ? 'Item atualizado!' : 'Produto cadastrado!')),
-      );
+      navigator.pop();
+
+      // Feedback contextual
+      if (result.id != item.id) {
+        // Houve merge (o resultado é um item diferente do que tentamos salvar)
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Quantidade adicionada a "${result.name}" '
+                  '(total: ${result.quantity.toStringAsFixed(0)}).',
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else if (widget.existingItem != null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Item atualizado!')),
+        );
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Produto cadastrado!')),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Erro ao salvar: $e')),
       );
     } finally {
