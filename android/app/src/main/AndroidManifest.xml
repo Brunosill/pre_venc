@@ -1,17 +1,26 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Permissões para OCR e captura de imagem -->
+    <!-- ==================== PERMISSÕES ==================== -->
+
+    <!-- Câmera e imagens -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Notificações (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Câmera é opcional (não bloqueia instalação em tablets sem câmera) -->
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
 
+    <!-- ==================== APLICAÇÃO ==================== -->
     <application
         android:label="Pre-Venc"
         android:name="${applicationName}"
@@ -37,15 +46,45 @@
             </intent-filter>
         </activity>
 
+        <!-- ==================== RECEIVERS (DENTRO DE <application>) ==================== -->
+
+        <!-- Receiver de agendamento de notificações -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+
+        <!-- Receiver que reagenda notificações após reinício do celular -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Receiver para ações interativas (Consumi / Descarta) -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+
+        <!-- ==================== METADATA DO FLUTTER ==================== -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
 
+    <!-- ==================== QUERIES (pacotes externos) ==================== -->
     <queries>
         <intent>
-            <action android:name=".MainActivity" />
+            <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 </manifest>
