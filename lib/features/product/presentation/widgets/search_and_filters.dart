@@ -58,7 +58,7 @@ class _SearchAndFiltersState extends ConsumerState<SearchAndFilters> {
                       icon: const Icon(Icons.clear),
                       onPressed: () {
                         _searchCtrl.clear();
-                        ref.read(searchQueryProvider.notifier).state = '';
+                        ref.read(searchQueryProvider.notifier).clear();
                       },
                     ),
                     isDense: true,

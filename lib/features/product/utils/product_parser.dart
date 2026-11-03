@@ -100,6 +100,27 @@ class ProductParser {
   }
 
   // ==================== PARSERS PÚBLICOS ====================
+
+  static ProductSuggestion parseFront(String text) {
+    return ProductSuggestion(
+      name: parseName(text),
+      barcode: parseBarcode(text),
+      source: ProductSource.ocr,
+    );
+  }
+
+  /// Extrai dados da foto do VERSO — apenas LOTE, FABRICAÇÃO e VALIDADE.
+  /// NÃO extrai nome (isso é papel da frente).
+  static ProductSuggestion parseBack(String text) {
+    return ProductSuggestion(
+      barcode: parseBarcode(text),
+      lote: parseLote(text),
+      manufacturingDate: parseFabricacao(text),
+      expirationDate: parseValidade(text),
+      source: ProductSource.ocr,
+    );
+  }
+
   static DateTime? parseValidade(String text) {
     final m = _validadeRegex.firstMatch(_sanitizeDates(text));
     return m == null ? null : _parseDateFromMatch(m);

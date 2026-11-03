@@ -232,28 +232,73 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     );
     if (result == null || !mounted) return;
 
+    // ============ REGRA 1: API > OCR ============
+    // Só preenche campos VAZIOS. Não sobrescreve dados já existentes
+    // (sejam da API, do usuário ou de uma execução anterior).
+    int filledCount = 0;
+
     setState(() {
-      if (result.suggestion.name != null && result.suggestion.name!.isNotEmpty) {
+      // Nome — só se estiver vazio
+      if (_nameCtrl.text.trim().isEmpty &&
+          result.suggestion.name != null &&
+          result.suggestion.name!.isNotEmpty) {
         _nameCtrl.text = result.suggestion.name!;
-      }
-      if (result.suggestion.lote != null) {
-        _loteCtrl.text = result.suggestion.lote!;
-      }
-      if (result.suggestion.manufacturingDate != null) {
-        _manufacturingDate = result.suggestion.manufacturingDate;
-      }
-      if (result.suggestion.expirationDate != null) {
-        _expirationDate = result.suggestion.expirationDate;
+        filledCount++;
       }
 
-      _ocrText1 = result.ocrText1;
-      _ocrText2 = result.ocrText2;
-      _source = 0;
+      // Lote — só se estiver vazio
+      if (_loteCtrl.text.trim().isEmpty && result.suggestion.lote != null) {
+        _loteCtrl.text = result.suggestion.lote!;
+        filledCount++;
+      }
+
+      // Fabricação — só se estiver vazia
+      if (_manufacturingDate == null &&
+          result.suggestion.manufacturingDate != null) {
+        _manufacturingDate = result.suggestion.manufacturingDate;
+        filledCount++;
+      }
+
+      // Validade — só se estiver vazia
+      if (_expirationDate == null && result.suggestion.expirationDate != null) {
+        _expirationDate = result.suggestion.expirationDate;
+        filledCount++;
+      }
+
+      // Barcode — só se estiver vazio
+      if (_barcodeCtrl.text.trim().isEmpty &&
+          result.suggestion.barcode != null) {
+        _barcodeCtrl.text = result.suggestion.barcode!;
+        filledCount++;
+      }
+
+      // Preserva fotos existentes se as novas vierem nulas
+      if (result.ocrText1 != null) _ocrText1 = result.ocrText1;
+      if (result.ocrText2 != null) _ocrText2 = result.ocrText2;
+
+      if (filledCount > 0) _source = 0; // origem mista/OCR
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Dados extraídos. Revise antes de salvar.')),
-    );
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (filledCount == 0) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Todos os campos já estavam preenchidos. Nada foi alterado.',
+          ),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '$filledCount campo(s) preenchido(s) pelo OCR. '
+                'Revise antes de salvar.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _save() async {

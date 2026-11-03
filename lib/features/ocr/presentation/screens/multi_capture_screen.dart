@@ -65,19 +65,27 @@ class _MultiCaptureScreenState extends ConsumerState<MultiCaptureScreen> {
     });
 
     try {
-      ProductSuggestion? merged;
       String? text1;
       String? text2;
+      ProductSuggestion? frontSuggestion;
+      ProductSuggestion? backSuggestion;
+
       final ocrService = OcrService();
 
       for (var i = 0; i < _paths.length; i++) {
         try {
           final text = await ocrService.extractText(_paths[i]);
-          if (i == 0) text1 = text;
-          if (i == 1) text2 = text;
 
-          final suggestion = ProductParser.parse(text);
-          merged = ProductParser.merge(merged, suggestion);
+          if (i == 0) {
+            // Foto 1 = FRENTE → só nome
+            text1 = text;
+            frontSuggestion = ProductParser.parseFront(text);
+          } else if (i == 1) {
+            // Foto 2 = VERSO → só lote e datas
+            text2 = text;
+            backSuggestion = ProductParser.parseBack(text);
+          }
+          // Fotos 3+ são ignoradas (o parser só processa 2 lados)
         } catch (_) {
           // foto falhou, continua
         }
@@ -85,6 +93,18 @@ class _MultiCaptureScreenState extends ConsumerState<MultiCaptureScreen> {
       }
 
       if (!mounted) return;
+
+      // ============ MERGE COM SEPARAÇÃO ESTRITA ============
+      // Front contribui apenas nome e (talvez) barcode
+      // Back contribui apenas lote, fabricação e validade
+      final merged = ProductSuggestion(
+        name: frontSuggestion?.name,
+        barcode: frontSuggestion?.barcode ?? backSuggestion?.barcode,
+        lote: backSuggestion?.lote,
+        manufacturingDate: backSuggestion?.manufacturingDate,
+        expirationDate: backSuggestion?.expirationDate,
+        source: ProductSource.ocr,
+      );
 
       // Salva evidência em RawProductData
       final rawId = const Uuid().v4();
@@ -101,7 +121,7 @@ class _MultiCaptureScreenState extends ConsumerState<MultiCaptureScreen> {
       await HiveBoxes.rawProductBox.put(rawId, raw);
 
       final result = CaptureResult(
-        suggestion: merged ?? ProductSuggestion(source: ProductSource.ocr),
+        suggestion: merged,
         rawId: rawId,
         imagePath1: raw.imagePath1,
         imagePath2: raw.imagePath2,
