@@ -4,10 +4,11 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'features/sync/data/services/sync_service.dart';
 import 'core/utils/hive_boxes.dart';
 import 'features/alerts/data/models/alert_settings_model.dart';
 import 'features/alerts/data/services/notification_service.dart';
-
+import 'features/product/data/services/inventory_migration_service.dart';
 import 'features/product/data/models/barcode_cache_model.dart';
 import 'features/product/data/models/inventory_item.dart';
 import 'features/product/data/models/raw_product_data.dart';
@@ -23,6 +24,14 @@ void main() async {
   Hive.registerAdapter(AlertSettingsModelAdapter());
 
   await HiveBoxes.init();
+  await InventoryMigrationService.migrateIdsIfNeeded();
+
+  try {
+    final client = Supabase.instance.client;
+    await SyncService(client).repairDuplicates();
+  } catch (_) {
+    // Silencioso: se não houver login/Supabase, ignora
+  }
   await NotificationService.init();
 
   const supabaseUrl = String.fromEnvironment('SUPABASE_URL');

@@ -4,8 +4,8 @@ import 'package:hive/hive.dart';
 class InventoryItem extends HiveObject {
   @HiveField(0) final String id;
   @HiveField(1) String? userId;
-  @HiveField(2) final String? barcode;
-  @HiveField(3) final int type;
+  @HiveField(2) String? barcode;       // ← agora mutável
+  @HiveField(3) int type;
   @HiveField(4) String name;
   @HiveField(5) String? lote;
   @HiveField(6) DateTime? manufacturingDate;
@@ -13,7 +13,7 @@ class InventoryItem extends HiveObject {
   @HiveField(8) double quantity;
   @HiveField(9) String? unit;
   @HiveField(10) String? notes;
-  @HiveField(11) final int source;
+  @HiveField(11) int source;
   @HiveField(12) final DateTime createdAt;
   @HiveField(13) DateTime updatedAt;
   @HiveField(14) DateTime? deletedAt;

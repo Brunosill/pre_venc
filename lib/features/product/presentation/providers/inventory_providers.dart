@@ -62,31 +62,28 @@ InventoryItem? _findConflict(
 
 /// Adiciona ou soma quantidade se houver conflito.
 /// Retorna o item resultante (novo ou existente mesclado).
-final addItemProvider = Provider<Future<InventoryItem> Function(InventoryItem)>(
-        (ref) {
-      final repo = ref.watch(inventoryRepositoryProvider);
-      final box = ref.watch(inventoryBoxProvider);
+final addItemProvider = Provider<Future<InventoryItem> Function(InventoryItem)>((ref) {
+  final repo = ref.watch(inventoryRepositoryProvider);
+  final box = ref.watch(inventoryBoxProvider);
 
-      return (item) async {
-        item.syncStatus = 0;
+  return (item) async {
+    item.syncStatus = 0;
 
-        final conflict = _findConflict(box, item);
-        if (conflict != null) {
-          // Soma quantidade ao existente
-          conflict.quantity += item.quantity;
-          conflict.updatedAt = DateTime.now();
-          conflict.syncStatus = 0;
-          // Preserva o userId se o conflito ainda era anônimo
-          conflict.userId ??= item.userId;
-          await conflict.save();
-          return conflict;
-        }
+    final existing = box.get(item.id);
+    if (existing != null && existing.deletedAt == null) {
+      // Mesma chave (barcode_lote) → soma
+      existing.quantity += item.quantity;
+      existing.updatedAt = DateTime.now();
+      existing.syncStatus = 0;
+      existing.userId ??= item.userId;
+      await existing.save();
+      return existing;
+    }
 
-        await repo.addItem(item);
-        return item;
-      };
-    });
-
+    await repo.addItem(item);
+    return item;
+  };
+});
 /// Atualiza ou soma quantidade se a edição gerar conflito.
 /// Retorna o item resultante (editado ou existente mesclado).
 final updateItemProvider =
