@@ -1,22 +1,19 @@
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
 
+/// Interface mantida igual à main:
+/// extractText(String imagePath) → Future<String>
 class OcrService {
-  final TextRecognizer _recognizer =
-      TextRecognizer(script: TextRecognitionScript.latin);
-
   Future<String> extractText(String imagePath) async {
-    final inputImage = InputImage.fromFilePath(imagePath);
-    final recognized = await _recognizer.processImage(inputImage);
-
-    final buffer = StringBuffer();
-    for (final block in recognized.blocks) {
-      buffer.writeln(block.text);
-      buffer.writeln();
+    try {
+      final text = await FlutterTesseractOcr.extractText(
+        imagePath,
+        language: 'por',
+      );
+      return text.trim();
+    } catch (e) {
+      return '';
     }
-    return buffer.toString().trim();
   }
 
-  void dispose() {
-    _recognizer.close();
-  }
+  void dispose() {}
 }
